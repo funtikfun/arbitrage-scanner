@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Фьючерсный сканер · PRO</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; background: #f5f7fb; padding: 24px 30px; color: #1e293b; font-size: 14px; line-height: 1.4; }
+        .container { background: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); padding: 30px; width: 100%; min-width: 1200px; max-width: 1750px; margin: 0 auto; }
+        h1 { font-size: 26px; font-weight: 500; display: flex; align-items: center; gap: 16px; margin-bottom: 25px; }
+        .last-update { font-size: 12px; color: #64748b; margin-bottom: 10px; margin-top:-15px; }
+
+        .filter-panel { margin-bottom: 30px; }
+        .filter-header { font-size: 16px; color: #475569; margin-bottom: 12px; }
+        
+        .market-row { display: flex; align-items: flex-start; margin-bottom: 16px; }
+        .market-title { width: 100px; font-size: 13px; color: #475569; margin-top: 3px; font-weight: 500;}
+        .market-checks { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; flex: 1; }
+        .checkbox-label { display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; color: #0f172a;}
+        .checkbox-label input[type="checkbox"] { width: 14px; height: 14px; cursor: pointer; accent-color: #0f172a;}
+        
+        .params-grid { display: flex; flex-wrap: wrap; gap: 20px 20px; margin-bottom: 15px; margin-top: 25px;}
+        .input-box { flex: 1; min-width: 140px; display: flex; flex-direction: column; gap: 6px; }
+        .input-title { font-size: 11px; color: #475569; display: flex; align-items: center; gap: 4px; font-weight: 600; text-transform: lowercase;}
+        .info-i { width: 12px; height: 12px; border-radius: 50%; border: 1px solid #3b82f6; color: #3b82f6; display: inline-flex; justify-content: center; align-items: center; font-size: 9px; cursor: help; }
+        
+        .param-input { border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px 12px; font-size: 13px; color: #0f172a; outline: none; background: #fff; transition: 0.2s;}
+        .param-input:focus { border-color: #94a3b8;}
+        .param-input::placeholder { color: #94a3b8;}
+
+        .ms-wrapper { position: relative; user-select: none; }
+        .ms-display { border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px 8px; min-height: 40px; background: #fff; display: flex; align-items: center; justify-content: space-between; cursor: text; transition: 0.2s; position: relative; }
+        .ms-display:hover, .ms-display.active { border-color: #94a3b8; }
+        .ms-content { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; flex: 1; overflow: hidden; padding-right: 6px; }
+        .ms-chip { background: #f1f5f9; color: #1e293b; font-size: 12px; padding: 3px 8px; border-radius: 12px; display: inline-flex; align-items: center; gap: 4px; font-weight: 500;}
+        .ms-chip .chip-close { background: #cbd5e1; color: #fff; width: 14px; height: 14px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 9px; cursor: pointer; }
+        .ms-chip .chip-close:hover { background: #94a3b8; }
+        .ms-more-badge { font-size: 13px; font-weight: 600; color: #0f172a; padding-left: 2px; }
+        .ms-search-input { border: none; outline: none; background: transparent; font-size: 13px; font-family: inherit; color: #0f172a; flex: 1; min-width: 40px; padding: 4px;}
+        .ms-search-input::placeholder { color: #94a3b8; font-weight: normal;}
+        .ms-controls { display: flex; align-items: center; gap: 6px; color: #64748b; font-size: 16px; font-weight: bold; cursor: pointer; }
+        .ms-clear-all { display: none; font-size: 14px;}
+        .ms-clear-all:hover { color: #0f172a; }
+        .ms-arrow { font-size: 10px; transition: transform 0.2s;}
+        .ms-wrapper.active .ms-arrow { transform: rotate(180deg); }
+        .ms-wrapper.active .ms-display { border-color: #0f172a; border-bottom-left-radius: 0; border-bottom-right-radius: 0; z-index: 101;}
+        .ms-dropdown { position: absolute; top: 100%; left: 0; width: 100%; background: #fdfdfd; border: 1px solid #0f172a; border-top: none; border-radius: 0 0 6px 6px; z-index: 100; display: none; max-height: 250px; overflow-y: auto; flex-direction: column; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
+        .ms-wrapper.active .ms-dropdown { display: flex; }
+        .ms-dropdown::-webkit-scrollbar { width: 14px; background: #e2e8f0; }
+        .ms-dropdown::-webkit-scrollbar-thumb { background-color: #334155; border: 2px solid #e2e8f0; border-radius: 8px;}
+        .ms-option { padding: 8px 12px; display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; transition: 0.1s; }
+        .ms-option:hover { background: #f1f5f9; }
+        .ms-option input { width: 14px; height: 14px; accent-color: #0f172a; pointer-events: none; }
+        .ms-no-options { padding: 12px; color: #64748b; font-size: 13px; text-align: left; }
+        
+        .filter-footer { display: flex; justify-content: flex-end; align-items:flex-end; gap:10px; margin-top: 20px;}
+        .btn-apply { background: #0f172a; color: #fff; border: none; padding: 10px 24px; font-size: 14px; font-weight: 600; border-radius: 6px; cursor: pointer; transition: 0.15s;}
+        .btn-apply:hover { background: #334155; }
+        
+        .table-wrapper { width: 100%; overflow-x: auto; border-radius: 6px; border: 1px solid #e2e8f0; margin-top: 20px;}
+        table { width: 100%; border-collapse: collapse; text-align: center; }
+        th { background: #fdfdfd; color: #475569; font-weight: 600; padding: 14px 10px; border-bottom: 1px solid #cbd5e1; font-size: 12px; white-space: nowrap; }
+        .th-title-container { display: inline-flex; align-items: center; justify-content: center; gap: 4px; }
+        .sortable { cursor: pointer; user-select: none; transition: background 0.2s;}
+        .sortable:hover { background: #f8fafc; }
+        .sort-icon { font-size: 12px; color: #64748b; min-width: 12px; display: inline-block; font-weight:bold;}
+        td { padding: 12px 10px; border-bottom: 1px solid #f1f5f9; font-size: 13px; background: white; color: #1e293b; }
+        tr.hoverable:hover > td { background-color: #f8fafc; }
+        tr.pinned-bg > td { background-color: #fffdf5; border-bottom: 1px solid #ffe9c4; }
+        
+        .metrics-block { display: flex; flex-direction: column; gap: 4px; line-height: 1.2; }
+        .top-row-vals { font-size: 12px; color: #64748b; white-space: nowrap; }
+        .bold-val { font-weight: 700; font-size: 13.5px; color: #0f172a;}
+        
+        .coin-wrapper { display: flex; align-items: center; justify-content: space-between; text-align: left; width: 150px; padding-left:10px;}
+        .coin-details { display: flex; align-items: center; gap: 12px; }
+        .coin-img-stub { width: 32px; height: 32px; border-radius: 6px; background: #0f172a; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 18px; flex-shrink: 0; box-shadow: 0 2px 4px rgba(0,0,0,0.15);}
+        .coin-info { display: flex; flex-direction: column; gap: 2px;}
+        .coin-ticker { font-weight: 700; font-size: 14px;}
+        .spread-toggler { font-size: 11px; color: #3b82f6; cursor: pointer; font-weight: 600; display: inline-flex; align-items: center;}
+        .spread-toggler:hover { text-decoration: underline; }
+        
+        .pin-btn { background: none; border: none; font-size: 14px; cursor: pointer; opacity: 0.15; transition: 0.2s;}
+        .pin-btn:hover { opacity: 0.8; }
+        .pin-btn.pinned { opacity: 1; transform: rotate(-45deg); filter: drop-shadow(0 2px 2px rgba(220, 38, 38, 0.4)); color:#dc2626;}
+        
+        .exchange-name { color: #3b82f6; font-weight: 500; text-transform:lowercase; letter-spacing: 0.2px; text-decoration: none; position: relative;}
+        .exchange-name:hover { text-decoration: underline; }
+
+        .limit-col { position: relative; line-height: 1.5;}
+        .ex-combo { display: flex; align-items: center; justify-content: center; gap: 4px; position:relative;}
+        .ex-nums { display:flex; align-items: center; justify-content: center; gap: 12px; font-family: "Roboto Mono", monospace; font-size: 11.5px; color:#0f172a; font-weight: 500;}
+        
+        /* Tooltip для шапки */
+        .info-circle { width: 13px; height: 13px; border-radius: 50%; border: 1px solid #94a3b8; color: #94a3b8; display: inline-flex; justify-content: center; align-items: center; font-size: 9px; cursor: help; font-weight: bold; position: relative;}
+        .header-tooltip-wrap { position: relative; cursor: help; }
+        .header-tooltip-wrap .custom-tt {
+            visibility: hidden; background-color: #64748b; color: #fff; text-align: left; padding: 10px 14px; border-radius: 6px;
+            position: absolute; z-index: 100; bottom: 140%; left: 50%; transform: translateX(-50%) translateY(6px); font-size: 11.5px;
+            font-family: -apple-system, sans-serif; font-weight: 400; line-height: 1.5; opacity: 0; transition: 0.2s ease-out; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            pointer-events: none; min-width: 250px; text-shadow:none; letter-spacing:0; text-transform:none; 
+        }
+        .header-tooltip-wrap:hover .custom-tt { opacity: 1; visibility: visible; transform: translateX(-50%) translateY(0); }
+
+        .pagination-container { display: flex; justify-content: center; align-items: center; margin-top: 24px; gap: 4px; }
+        .page-btn { min-width: 32px; height: 32px; border-radius: 50%; border: none; background: none; color: #475569; font-weight: 500; font-size: 14px; cursor: pointer; transition: 0.15s; }
+        .page-btn:hover:not(:disabled) { background: #f1f5f9; }
+        .page-btn.active { background: #3b82f6; color: #fff; }
+        .page-btn:disabled { color: #cbd5e1; cursor: default; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Фьючерсный сканер</h1>
+    <div class="last-update" id="updateTime">Загрузка данных платформы...</div>
+
+    <div class="filter-panel">
+        <div class="filter-header">Выберите биржи</div>
+        
+        <div class="market-row">
+            <div class="market-title">Фьючерсы</div>
+            <div class="market-checks" id="f-checks">
+                <label class="checkbox-label"><input type="checkbox" id="exAllF" checked><span style="font-weight:700; background:#0f172a; color:#fff; border-radius:4px; padding:0px 4px; font-size:12px; margin-right:4px;">Всё</span></label>
+                <label class="checkbox-label"><input type="checkbox" class="cb-f" value="binance" checked>Binance</label>
+                <label class="checkbox-label"><input type="checkbox" class="cb-f" value="bybit" checked>ByBit</label>
+                <label class="checkbox-label"><input type="checkbox" class="cb-f" value="mexc" checked>MEXC</label>
+                <label class="checkbox-label"><input type="checkbox" class="cb-f" value="okx" checked>OKX</label>
+                <label class="checkbox-label"><input type="checkbox" class="cb-f" value="bitget" checked>Bitget</label>
+                <label class="checkbox-label"><input type="checkbox" class="cb-f" value="kucoin" checked>KuCoin</label>
+                <label class="checkbox-label"><input type="checkbox" class="cb-f" value="coinex" checked>CoinEx</label>
+                <label class="checkbox-label"><input type="checkbox" class="cb-f" value="bingx" checked>BingX</label> <!-- 🔴 -->
+            </div>
+        </div>
+
+        <div class="market-row">
+            <div class="market-title">Спот</div>
+            <div class="market-checks" id="s-checks">
+                <label class="checkbox-label"><input type="checkbox" id="exAllS"><span style="font-weight:700; background:#0f172a; color:#fff; border-radius:4px; padding:0px 4px; font-size:12px; margin-right:4px;">Всё</span></label>
+                <label class="checkbox-label"><input type="checkbox" class="cb-s" value="binance">Binance</label>
+                <label class="checkbox-label"><input type="checkbox" class="cb-s" value="bybit">ByBit</label>
+                <label class="checkbox-label"><input type="checkbox" class="cb-s" value="mexc">MEXC</label>
+                <label class="checkbox-label"><input type="checkbox" class="cb-s" value="okx">OKX</label>
+                <label class="checkbox-label"><input type="checkbox" class="cb-s" value="bitget">Bitget</label>
+                <label class="checkbox-label"><input type="checkbox" class="cb-s" value="kucoin">KuCoin</label>
+                <label class="checkbox-label"><input type="checkbox" class="cb-s" value="coinex">CoinEx</label>
+                <label class="checkbox-label"><input type="checkbox" class="cb-s" value="bingx">BingX</label> <!-- 🔴 -->
+            </div>
+        </div>
+        
+        <div class="market-row">
+            <div class="market-title">Маржа</div>
+            <div class="market-checks" id="m-checks">
+                <label class="checkbox-label"><input type="checkbox" id="exAllM"><span style="font-weight:700; background:#0f172a; color:#fff; border-radius:4px; padding:0px 4px; font-size:12px; margin-right:4px;">Всё</span></label>
+                <label class="checkbox-label"><input type="checkbox" class="cb-m" value="binance">Binance</label>
+                <label class="checkbox-label"><input type="checkbox" class="cb-m" value="bybit">ByBit</label>
+                <label class="checkbox-label"><input type="checkbox" class="cb-m" value="okx">OKX</label>
+                <label class="checkbox-label"><input type="checkbox" class="cb-m" value="bitget">Bitget</label>
+                <label class="checkbox-label"><input type="checkbox" class="cb-m" value="kucoin">KuCoin</label>
+                <label class="checkbox-label"><input type="checkbox" class="cb-m" value="coinex">CoinEx</label>
+                <label class="checkbox-label"><input type="checkbox" class="cb-m" value="bingx">BingX</label> <!-- 🔴 -->
+            </div>
+        </div>
+
+        <div class="filter-header" style="margin-top:30px; font-weight:400; font-size:18px;">Настройте параметры</div>
+        <div class="params-grid">
+            <div class="input-box">
+                <div class="input-title">Текущий спред <span class="info-i">i</span></div>
+                <input type="number" id="fCurrentSp" class="param-input" placeholder="Например: 0.7">
+            </div>
+            <div class="input-box">
+                <div class="input-title">Курсовой спред <span class="info-i">i</span></div>
+                <input type="number" id="fKursSp" class="param-input" placeholder="Например: 0.7">
+            </div>
+            <div class="input-box">
+                <div class="input-title">Объем, $ <span class="info-i">i</span></div>
+                <select id="fMinVol" class="param-input" style="font-weight:500;">
+                    <option value="0">0</option><option value="100">100</option><option value="300">300</option><option value="500">500</option><option value="1000">1000</option><option value="5000">5000</option><option value="10000">10000</option>
+                </select>
+            </div>
+            <div class="input-box">
+                <div class="input-title">Тип списка</div>
+                <select id="fListType" class="param-input">
+                    <option value="ff">Фьюч-фьюч</option><option value="sf">Спот-фьюч</option><option value="fm">Фьюч-маржа</option>
+                </select>
+            </div>
+            <div class="input-box" style="flex: 1.5;">
+                <div class="input-title">Избранное <span class="info-i" title="Показывать только эти монеты">i</span></div>
+                <div class="ms-wrapper" id="whitelistMenu">
+                    <div class="ms-display">
+                        <div class="ms-content"><div class="ms-chips-area"></div><input type="text" class="ms-search-input" placeholder="Добавить в Избранное..."></div>
+                        <div class="ms-controls"><span class="ms-clear-all" title="Очистить все">×</span><span class="ms-arrow">▼</span></div>
+                    </div>
+                    <div class="ms-dropdown"></div>
+                </div>
+            </div>
+            <div class="input-box" style="flex: 1.5;">
+                <div class="input-title">Черный список <span class="info-i" title="Исключить мусорные монеты">i</span></div>
+                <div class="ms-wrapper" id="blacklistMenu">
+                    <div class="ms-display">
+                        <div class="ms-content"><div class="ms-chips-area"></div><input type="text" class="ms-search-input" placeholder="Выберите для бана..."></div>
+                        <div class="ms-controls"><span class="ms-clear-all" title="Очистить все">×</span><span class="ms-arrow">▼</span></div>
+                    </div>
+                    <div class="ms-dropdown"></div>
+                </div>
+            </div>
+            <div class="input-box">
+                <div class="input-title">Период лонг</div>
+                <select id="fPeriodL" class="param-input"><option value="0">Любой период</option><option value="1">1ч</option><option value="4">4ч</option><option value="8">8ч</option></select>
+            </div>
+            <div class="input-box">
+                <div class="input-title">Период шорт</div>
+                <select id="fPeriodS" class="param-input"><option value="0">Любой период</option><option value="1">1ч</option><option value="4">4ч</option><option value="8">8ч</option></select>
+            </div>
+            <div class="input-box">
+                <div class="input-title">Монет в таблице</div>
+                <select id="fPageSize" class="param-input" style="font-weight:500;"><option value="10">10</option><option value="20">20</option><option value="50">50</option><option value="100">100</option></select>
+            </div>
+        </div>
+        <div class="filter-footer">
+            <button class="btn-apply" onclick="applySettings()">Применить</button>
+        </div>
+    </div>
+
+    <!-- ТАБЛИЦА -->
+    <div class="table-wrapper">
+        <table>
+            <thead>
+                <tr>
+                    <th><div class="th-title-container">Монета <span class="info-circle">i</span></div></th>
+                    <th><div class="th-title-container">Биржа 
+                        <span class="info-circle header-tooltip-wrap">i
+                            <div class="custom-tt">
+                                При нажатии на эмодзи 📊 открывается график спредов.<br>В нижней строке под биржами представлены доступные объёмы сделки из 1-го уровня стакана в $.
+                            </div>
+                        </span>
+                    </div></th>
+                    <th class="sortable" data-sort="current"><div class="th-title-container">Текущий <span class="sort-icon" id="sort-current"></span></div></th>
+                    <th class="sortable" data-sort="kurs"><div class="th-title-container">Курсовой <span class="sort-icon" id="sort-kurs">↓</span></div></th>
+                    <th><div class="th-title-container">Период</div></th>
+                    <th><div class="th-title-container">Отклонение <span class="info-circle">i</span></div></th>
+                    <th><div class="th-title-container">Комиссия</div></th>
+                    <th class="sortable" data-sort="1d"><div class="th-title-container">1 день <span class="sort-icon"></span></div></th>
+                    <th class="sortable" data-sort="3d"><div class="th-title-container">3 дня <span class="sort-icon"></span></div></th>
+                    <th class="sortable" data-sort="7d"><div class="th-title-container">1 неделя <span class="sort-icon"></span></div></th>
+                    <th class="sortable" data-sort="30d"><div class="th-title-container">1 месяц <span class="sort-icon"></span></div></th>
+                    <th class="sortable" data-sort="90d"><div class="th-title-container">3 месяца <span class="sort-icon"></span></div></th>
+                </tr>
+            </thead>
+            <tbody id="tableBody">
+                <tr><td colspan="12" style="padding: 48px; color: #94a3b8;">Поиск данных...</td></tr>
+            </tbody>
+        </table>
+    </div>
+    <div class="pagination-container" id="pagination"></div>
+</div>
+
+<script>
+    let masterOppDb = [];         
+    let expandedSet = new Set();
+    let pinnedSet = new Set();
+    let blacklistedSet = new Set(); 
+    let whitelistedSet = new Set(); 
+    let allAvailableCoins = [];
+    
+    let appliedFilters = {
+        exchangesF: ['binance_futures', 'bybit_futures', 'okx_futures', 'mexc_futures', 'bitget_futures', 'kucoin_futures', 'coinex_futures', 'bingx_futures'], // 🔴 По дефолту включен
+        exchangesS: [], exchangesM: [], listType: 'ff', minKursSpread: null, minCurrentSpread: null, reqLimitUsd: 0, periodL: 0, periodS: 0, 
+    };
+
+    let sortState = { field: 'kurs', direction: 1 };
+    let currentPage = 1; let pageSize = 10; 
+
+    const allBoxF = document.getElementById('exAllF'); const childBoxesF = document.querySelectorAll('.cb-f');
+    allBoxF.addEventListener('change', (e) => { childBoxesF.forEach(cb => cb.checked = e.target.checked); applySettings(); });
+    childBoxesF.forEach(cb => { cb.addEventListener('change', () => { if (!cb.checked) allBoxF.checked = false; if (Array.from(childBoxesF).every(b => b.checked)) allBoxF.checked = true; applySettings();}); });
+
+    const allBoxS = document.getElementById('exAllS'); const childBoxesS = document.querySelectorAll('.cb-s');
+    allBoxS.addEventListener('change', (e) => { childBoxesS.forEach(cb => cb.checked = e.target.checked); applySettings(); });
+    childBoxesS.forEach(cb => { cb.addEventListener('change', () => { if (!cb.checked) allBoxS.checked = false; if (Array.from(childBoxesS).every(b => b.checked)) allBoxS.checked = true; applySettings();}); });
+
+    const allBoxM = document.getElementById('exAllM'); const childBoxesM = document.querySelectorAll('.cb-m');
+    allBoxM.addEventListener('change', (e) => { childBoxesM.forEach(cb => cb.checked = e.target.checked); applySettings(); });
+    childBoxesM.forEach(cb => { cb.addEventListener('change', () => { if (!cb.checked) allBoxM.checked = false; if (Array.from(childBoxesM).every(b => b.checked)) allBoxM.checked = true; applySettings();}); });
+
+
+    function attachMultiSelect(wrapperId, storeSet) {
+        const wrap = document.getElementById(wrapperId); const display = wrap.querySelector('.ms-display'); const searchInput = wrap.querySelector('.ms-search-input');
+        const chipsArea = wrap.querySelector('.ms-chips-area'); const dropArea = wrap.querySelector('.ms-dropdown'); const clearBtn = wrap.querySelector('.ms-clear-all');
+        display.addEventListener('click', (e) => {
+            if(e.target === clearBtn || e.target.closest('.chip-close')) return;
+            if (!wrap.classList.contains('active')) { wrap.classList.add('active'); _renderChips(); searchInput.focus(); _buildOptions(""); } else if(e.target !== searchInput) { wrap.classList.remove('active'); searchInput.value = ""; _renderChips(); }
+        });
+        searchInput.addEventListener('input', (e) => _buildOptions(e.target.value));
+        document.addEventListener('click', (e) => { if (!wrap.contains(e.target) && wrap.classList.contains('active')) { wrap.classList.remove('active'); searchInput.value = ""; _renderChips(); } });
+
+        const _buildOptions = (query) => {
+            dropArea.innerHTML = ''; const lwq = query.toLowerCase(); const filtCoins = allAvailableCoins.filter(c => c.toLowerCase().includes(lwq));
+            if (filtCoins.length === 0) { dropArea.innerHTML = '<div class="ms-no-options">Ничего не найдено</div>'; return; }
+            filtCoins.forEach(coinStr => {
+                const label = document.createElement('label'); label.className = 'ms-option';
+                const box = document.createElement('input'); box.type = 'checkbox'; box.checked = storeSet.has(coinStr);
+                const span = document.createElement('span'); span.innerText = `${coinStr}USDT`;
+                label.onclick = (e) => { e.preventDefault(); if(storeSet.has(coinStr)) storeSet.delete(coinStr); else storeSet.add(coinStr); _buildOptions(searchInput.value); _renderChips(); searchInput.focus(); };
+                label.appendChild(box); label.appendChild(span); dropArea.appendChild(label);
+            });
+        };
+
+        const _renderChips = () => {
+            chipsArea.innerHTML = ''; const isOpen = wrap.classList.contains('active'); let arr = Array.from(storeSet);
+            clearBtn.style.display = arr.length > 0 ? 'block' : 'none';
+            if (isOpen) {
+                arr.forEach(c => {
+                    const ch = document.createElement('div'); ch.className = 'ms-chip'; ch.innerHTML = `${c}USDT`;
+                    const xb = document.createElement('div'); xb.className = 'chip-close'; xb.innerHTML = '✕';
+                    xb.onclick = (ev) => { ev.stopPropagation(); storeSet.delete(c); _buildOptions(searchInput.value); _renderChips(); searchInput.focus(); }; ch.appendChild(xb); chipsArea.appendChild(ch);
+                });
+                searchInput.style.display = 'block'; searchInput.placeholder = arr.length > 0 ? "" : "Введите тикер...";
+            } else {
+                searchInput.value = "";
+                if (arr.length > 0) {
+                    searchInput.style.display = 'none'; const ch = document.createElement('div'); ch.className = 'ms-chip'; ch.innerHTML = `${arr[0]}USDT`;
+                    const xb = document.createElement('div'); xb.className = 'chip-close'; xb.innerHTML = '✕';
+                    xb.onclick = (ev) => { ev.stopPropagation(); storeSet.delete(arr[0]); _buildOptions(""); _renderChips(); }; ch.appendChild(xb); chipsArea.appendChild(ch);
+                    if (arr.length > 1) { const bdg = document.createElement('span'); bdg.className = 'ms-more-badge'; bdg.innerHTML = `+${arr.length - 1}`; chipsArea.appendChild(bdg); }
+                } else { searchInput.style.display = 'block'; searchInput.placeholder = "Все монеты"; }
+            }
+        };
+
+        clearBtn.addEventListener('click', () => { storeSet.clear(); searchInput.value = ""; _buildOptions(""); _renderChips(); });
+        return { rebuildOptions: () => { _buildOptions(searchInput.value); }, renderChips: _renderChips };
+    }
+    const whitelistEngine = attachMultiSelect('whitelistMenu', whitelistedSet);
+    const blacklistEngine = attachMultiSelect('blacklistMenu', blacklistedSet);
+
+    // НОВЫЙ КОНСТРУКТОР ССЫЛОК СО СПЕЦИФИКОЙ 8 БИРЖ
+    function buildExchangeUrl(exRaw, symbol) {
+        if (!exRaw || !symbol) return '#';
+        const parts = exRaw.split('_');
+        const ex = parts[0].toLowerCase();
+        const market = parts.length > 1 ? parts[1].toLowerCase() : 'spot';
+        let sym = symbol.toUpperCase();
+        
+        let base = sym;
+        base = base.replace(/-USDT-SWAP$/i, '').replace(/_USDT$/i, '').replace(/USDTM$/i, '').replace(/-USDT$/i, '').replace(/USDT$/i, '');
+                   
+        switch(ex) {
+            case 'binance':
+                if (market === 'futures') return `https://www.binance.com/en/futures/${sym}`;
+                if (market === 'margin') return `https://www.binance.com/en/trade/${base}_USDT?type=cross`;
+                return `https://www.binance.com/en/trade/${base}_USDT?type=spot`;
+            case 'bybit':
+                if (market === 'futures') return `https://www.bybit.com/trade/usdt/${sym}`;
+                return `https://www.bybit.com/ru-RU/trade/spot/${base}/USDT`;
+            case 'okx':
+                let okxB = base.toLowerCase();
+                if (market === 'futures') return `https://www.okx.com/trade-swap/${okxB}-usdt-swap`;
+                if (market === 'margin') return `https://www.okx.com/ru/trade-margin/${okxB}-usdt`;
+                return `https://www.okx.com/trade-spot/${okxB}-usdt`;
+            case 'bitget':
+                if (market === 'futures') return `https://www.bitget.com/futures/usdt/${sym}`;
+                if (market === 'margin') return `https://www.bitget.com/spot/${base}USDT?type=isolated`;
+                return `https://www.bitget.com/spot/${base}USDT`;
+            case 'mexc':
+                if (market === 'futures') return `https://www.mexc.com/ru-RU/futures/${base}_USDT?type=linear_swap`;
+                return `https://www.mexc.com/ru-RU/exchange/${base}_USDT?_from=search_spot_trade`;
+            case 'kucoin':
+                if (market === 'futures') return `https://www.kucoin.com/trade/futures/${sym}`;
+                if (market === 'margin') return `https://www.kucoin.com/trade/margin/${base}-USDT`;
+                return `https://www.kucoin.com/trade/${base}-USDT`;
+            case 'coinex': { 
+                let baseLow = base.toLowerCase();
+                if (market === 'futures') return `https://www.coinex.com/ru/futures/${baseLow}-usdt`;
+                if (market === 'margin') return `https://www.coinex.com/ru/exchange/${baseLow}-usdt#margin`;
+                return `https://www.coinex.com/ru/exchange/${baseLow}-usdt`;
+            }
+            case 'bingx': { // 🔴 ВНЕЛИ РОУТЫ БИНКСА В СКАНЕР
+                let baseUp = base.toUpperCase();
+                if (market === 'futures') return `https://bingx.com/ru/perpetual/${baseUp}-USDT`;
+                return `https://bingx.com/ru/spot/${baseUp}USDT`;
+            }
+            default: return '#';
+        }
+    }
+
+    function applySettings() {
+        appliedFilters.exchangesF = Array.from(childBoxesF).filter(b => b.checked).map(b => b.value + "_futures");
+        appliedFilters.exchangesS = Array.from(childBoxesS).filter(b => b.checked).map(b => b.value + "_spot");
+        appliedFilters.exchangesM = Array.from(childBoxesM).filter(b => b.checked).map(b => b.value + "_margin"); 
+
+        appliedFilters.listType = document.getElementById('fListType').value;
+        const inKurs = parseFloat(document.getElementById('fKursSp').value); const inCur = parseFloat(document.getElementById('fCurrentSp').value);
+        appliedFilters.minKursSpread = isNaN(inKurs) ? null : inKurs; appliedFilters.minCurrentSpread = isNaN(inCur) ? null : inCur;
+        appliedFilters.reqLimitUsd = parseFloat(document.getElementById('fMinVol').value); appliedFilters.periodL = parseInt(document.getElementById('fPeriodL').value) || 0;
+        appliedFilters.periodS = parseInt(document.getElementById('fPeriodS').value) || 0; pageSize = parseInt(document.getElementById('fPageSize').value) || 10;
+        currentPage = 1; renderTableUI();
+    }
+
+    function parseD(v) { const n = Number(v); return isNaN(n) ? "0.00" : (n < 1 && n > -1 && n !== 0 ? n.toFixed(4) : n.toFixed(2).replace(/\.00$/, '')); }
+    
+    function createMetricCell(valA, valB, boldResult, addPerc = true) {
+        const v = Number(boldResult); const symbol = addPerc ? '%' : '';
+        return `<div class="metrics-block"><div class="top-row-vals">${Number(valA).toFixed(2)} <span style="opacity:0.5">|</span> ${Number(valB).toFixed(2)}</div><div class="bold-val">${v.toFixed(2)}${symbol}</div></div>`;
+    }
+    
+    function buildExchangeBlockUI(it, isChild) {
+        let bExRaw = it.buy_exchange;
+        let sExRaw = it.sell_exchange;
+        const bExDisp = bExRaw.replace('_futures', '').replace('_spot', '').replace('_margin', ''); 
+        const sExDisp = sExRaw.replace('_futures', '').replace('_spot', '').replace('_margin', '');
+        
+        let lnkChart = `/chart?buyEx=${it.buy_exchange}&sellEx=${it.sell_exchange}&bSym=${it.buy_symbol}&sSym=${it.sell_symbol}&coin=${it.coin}`;
+        
+        const lnkBuyExUrl = buildExchangeUrl(bExRaw, it.buy_symbol); 
+        const lnkSellExUrl = buildExchangeUrl(sExRaw, it.sell_symbol);
+
+        let fmtLvlUSD_L = it.buy_cap ? (it.buy_cap >= 999999 ? '∞$' : '$'+Math.floor(it.buy_cap).toLocaleString('ru-RU')) : '-';
+        let fmtLvlUSD_S = it.sell_cap ? (it.sell_cap >= 999999 ? '∞$' : '$'+Math.floor(it.sell_cap).toLocaleString('ru-RU')) : '-';
+
+        return `
+            <td class="limit-col">
+                <div style="display:flex; flex-direction:column; justify-content:center; align-items:center;">
+                    <div class="ex-combo">
+                        <a href="${lnkBuyExUrl}" class="exchange-name" target="_blank">${bExDisp}</a> 
+                        <span style="opacity:0.4; margin:0 3px;">|</span> 
+                        <a href="${lnkSellExUrl}" class="exchange-name" target="_blank">${sExDisp}</a>
+                        
+                        <a href="${lnkChart}" target="_blank" style="margin-left: 3px; cursor:pointer; text-decoration:none; font-size:14px;">📊</a>
+                    </div>
+                    <div class="ex-nums"><span>${fmtLvlUSD_L}</span><span style="opacity:0.3;">|</span><span>${fmtLvlUSD_S}</span></div>
+                </div>
+            </td>
+        `;
+    }
+
+    function generateDynamicCols(it) {
+        let isBuyFlat = !it.buy_exchange.includes('futures'); 
+        let isSellFlat = !it.sell_exchange.includes('futures'); 
+        
+        const rateBuy = (it.funding_rates||{})[it.buy_exchange]||0; const rateSell = (it.funding_rates||{})[it.sell_exchange]||0;
+        const bAc = it.accumulated_buy||{}; const sAc = it.accumulated_sell||{};
+        
+        let c_curr, c_period, c_dev, c_1, c_3, c_7, c_30, c_90;
+
+        const kursCol = `<td><div class="metrics-block"><div class="top-row-vals">${parseD(it.ask_price)} <span style="opacity:0.5">|</span> ${parseD(it.bid_price)}</div><div class="bold-val" style="color:#0f172a">${it.spread.toFixed(2)}%</div></div></td>`;
+        const commCol = `<td style="vertical-align:middle; color:#475569; font-weight: 500;">${((it.buy_commission + it.sell_commission)*2).toFixed(2)}%</td>`;
+
+        if (isBuyFlat && !isSellFlat) {
+            c_curr = `<td style="vertical-align:middle"><span class="bold-val" style="color:#0f172a">${rateSell.toFixed(2)}%</span></td>`; c_period = `<td style="vertical-align:middle"><span style="color:#475569">${it.sell_interval}</span></td>`; c_dev = `<td style="vertical-align:middle"><span style="color:#475569">${(it.sell_deviation||0).toFixed(2)}</span></td>`;
+            const dp = v => `<td style="vertical-align:middle"><span class="bold-val" style="color:#0f172a">${(v||0).toFixed(2)}%</span></td>`; c_1=dp(sAc['1d']); c_3=dp(sAc['3d']); c_7=dp(sAc['7d']); c_30=dp(sAc['30d']); c_90=dp(sAc['90d']);
+        } 
+        else if (!isBuyFlat && isSellFlat) {
+            c_curr = `<td style="vertical-align:middle"><span class="bold-val" style="color:#0f172a">${rateBuy.toFixed(2)}%</span></td>`; c_period = `<td style="vertical-align:middle"><span style="color:#475569">${it.buy_interval}</span></td>`; c_dev = `<td style="vertical-align:middle"><span style="color:#475569">${(it.buy_deviation||0).toFixed(2)}</span></td>`;
+            const dp = v => `<td style="vertical-align:middle"><span class="bold-val" style="color:#0f172a">${(v||0).toFixed(2)}%</span></td>`; c_1=dp(bAc['1d']); c_3=dp(bAc['3d']); c_7=dp(bAc['7d']); c_30=dp(bAc['30d']); c_90=dp(bAc['90d']);
+        } 
+        else {
+            c_curr = `<td><div class="metrics-block"><div class="top-row-vals">${rateBuy.toFixed(2)} <span style="opacity:0.5">|</span> ${rateSell.toFixed(2)}</div><div class="bold-val" style="color:#0f172a">${(rateSell-rateBuy).toFixed(2)}%</div></div></td>`; c_period = `<td style="vertical-align:middle"><span style="color:#475569">${it.buy_interval} | ${it.sell_interval}</span></td>`; c_dev = `<td style="vertical-align:middle"><span style="color:#475569">${(it.buy_deviation||0).toFixed(2)} | ${(it.sell_deviation||0).toFixed(2)}</span></td>`;
+            const mC = k => `<td>${createMetricCell(bAc[k], sAc[k], (sAc[k]||0)-(bAc[k]||0))}</td>`; c_1=mC('1d'); c_3=mC('3d'); c_7=mC('7d'); c_30=mC('30d'); c_90=mC('90d');
+        }
+
+        return c_curr + kursCol + c_period + c_dev + commCol + c_1 + c_3 + c_7 + c_30 + c_90;
+    }
+
+    function getEvalScoreForSort(op, queryField) {
+        if (!op) return -99999;
+        switch (queryField) {
+            case 'kurs': return op.spread || 0; case 'current': return (op.funding_rates[op.sell_exchange] || 0) - (op.funding_rates[op.buy_exchange] || 0);
+            case '1d': case '3d': case '7d': case '30d': case '90d': return ((op.accumulated_sell||{})[queryField]||0) - ((op.accumulated_buy||{})[queryField]||0); default: return op.spread || 0;
+        }
+    }
+
+    window.toggleAccordion = function(cKey) { expandedSet.has(cKey) ? expandedSet.delete(cKey) : expandedSet.add(cKey); renderTableUI(); };
+    window.togglePin = function(cKey, e) { e.stopPropagation(); pinnedSet.has(cKey) ? pinnedSet.delete(cKey) : pinnedSet.add(cKey); renderTableUI(); };
+    window.setPage = function(pN) { currentPage = pN; window.scrollTo({ top: 300, behavior: 'smooth' }); renderTableUI(); };
+    document.querySelectorAll('.sortable').forEach(h => { h.onclick = function() { if (sortState.field === this.dataset.sort) { sortState.direction = sortState.direction === 1 ? -1 : 1; } else { sortState.field = this.dataset.sort; sortState.direction = 1; } renderTableUI(); }; });
+
+    function renderTableUI() {
+        const tArea = document.getElementById('tableBody');
+        if (!masterOppDb || masterOppDb.length === 0) return tArea.innerHTML = '<tr><td colspan="12">Ожидание HFT спредов от бирж...</td></tr>';
+        if (allAvailableCoins.length === 0) { const rawUniq = [...new Set(masterOppDb.map(i => i.coin.toUpperCase()))].sort(); allAvailableCoins = rawUniq; whitelistEngine.rebuildOptions(); whitelistEngine.renderChips(); blacklistEngine.rebuildOptions(); blacklistEngine.renderChips(); }
+
+        const filteredOps = masterOppDb.filter(opp => {
+            let coinUP = opp.coin.toUpperCase();
+            if (whitelistedSet.size > 0 && !whitelistedSet.has(coinUP)) return false;
+            if (blacklistedSet.size > 0 && blacklistedSet.has(coinUP)) return false;
+            
+            let isBF = opp.buy_exchange.includes('futures'); let isBM = opp.buy_exchange.includes('margin'); let isBS = opp.buy_exchange.includes('spot');
+            let isSF = opp.sell_exchange.includes('futures'); let isSM = opp.sell_exchange.includes('margin'); let isSS = opp.sell_exchange.includes('spot');
+            
+            if (appliedFilters.listType === 'ff') { 
+                if (!isBF || !isSF) return false; 
+                if (!appliedFilters.exchangesF.includes(opp.buy_exchange) || !appliedFilters.exchangesF.includes(opp.sell_exchange)) return false; 
+            } 
+            else if (appliedFilters.listType === 'sf') { 
+                if ((isBF && isSF) || isBM || isSM) return false;
+                if (isBS) { if(!appliedFilters.exchangesS.includes(opp.buy_exchange)) return false; } else { if(!appliedFilters.exchangesF.includes(opp.buy_exchange)) return false; }
+                if (isSS) { if(!appliedFilters.exchangesS.includes(opp.sell_exchange)) return false; } else { if(!appliedFilters.exchangesF.includes(opp.sell_exchange)) return false; }
+            }
+            else if (appliedFilters.listType === 'fm') { 
+                if ((isBF && isSF) || isBS || isSS) return false;
+                if (isBM) { if(!appliedFilters.exchangesM.includes(opp.buy_exchange)) return false; } else { if(!appliedFilters.exchangesF.includes(opp.buy_exchange)) return false; }
+                if (isSM) { if(!appliedFilters.exchangesM.includes(opp.sell_exchange)) return false; } else { if(!appliedFilters.exchangesF.includes(opp.sell_exchange)) return false; }
+            }
+
+            if (opp.buy_interval !== 0 && appliedFilters.periodL > 0 && opp.buy_interval !== appliedFilters.periodL) return false;
+            if (opp.sell_interval !== 0 && appliedFilters.periodS > 0 && opp.sell_interval !== appliedFilters.periodS) return false;
+            if (appliedFilters.minKursSpread !== null && opp.spread < appliedFilters.minKursSpread) return false;
+            
+            let currentSpr = (opp.funding_rates[opp.sell_exchange] || 0) - (opp.funding_rates[opp.buy_exchange] || 0);
+            if (appliedFilters.minCurrentSpread !== null && currentSpr < appliedFilters.minCurrentSpread) return false;
+            
+            let minVolSides = Math.min(opp.buy_cap || 0, opp.sell_cap || 0); 
+            if (appliedFilters.reqLimitUsd > 0 && minVolSides < appliedFilters.reqLimitUsd && minVolSides != 9999999) return false;
+            
+            return true;
+        });
+
+        document.querySelectorAll('.sort-icon').forEach(ic => ic.innerHTML = '');
+        if (sortState.field) document.getElementById('sort-' + sortState.field).innerHTML = sortState.direction === 1 ? '↓' : '↑';
+
+        const sg = {}; filteredOps.forEach(op => { if (!sg[op.coin]) sg[op.coin] = []; sg[op.coin].push(op); });
+
+        let renderObjGroup = Object.keys(sg).map(coin => {
+            const gr = sg[coin]; let bestId = 0, bestSc = getEvalScoreForSort(gr[0], sortState.field || 'kurs'); const dr = sortState.direction || 1;
+            for(let i=1; i<gr.length; i++) { let sc = getEvalScoreForSort(gr[i], sortState.field || 'kurs'); if ((dr===1 && sc>bestSc) || (dr===-1 && sc<bestSc)) { bestSc = sc; bestId = i; } }
+            return { c: coin, score: bestSc, top: gr[bestId], all: gr };
+        });
+
+        renderObjGroup.sort((a,b) => { let pa = pinnedSet.has(a.c), pb = pinnedSet.has(b.c); if(pa && !pb) return -1; if(!pa && pb) return 1; return sortState.direction === 1 ? b.score - a.score : a.score - b.score; });
+        const limitRenderItems = renderObjGroup.slice((currentPage-1)*pageSize, currentPage*pageSize); let trH = '';
+
+        limitRenderItems.forEach(group => {
+            const it = group.top;
+            const rC = 'hoverable ' + (pinnedSet.has(group.c)?'pinned-bg':'');
+
+            trH += `<tr class="${rC}">
+            <td><div class="coin-wrapper">
+               <div class="coin-details"><div class="coin-img-stub">${group.c.substring(0,2)}</div>
+               <div class="coin-info"><span class="coin-ticker">${group.c}</span>
+                   <span class="spread-toggler" onclick="toggleAccordion('${group.c}')">${group.all.length} спреда <span>${expandedSet.has(group.c)?'▴':'▾'}</span></span>
+               </div></div><button class="pin-btn ${pinnedSet.has(group.c)?'pinned':''}" onclick="togglePin('${group.c}',event)">📌</button>
+            </div></td>
+            ${buildExchangeBlockUI(it, false)}
+            ${generateDynamicCols(it)}
+            </tr>`;
+
+            if(expandedSet.has(group.c) && group.all.length>1) {
+                let tail = group.all.filter(v => v !== it); tail.sort((a,b)=>b.spread - a.spread);
+                tail.forEach(tIt => {
+                    trH += `<tr class="${rC}" style="background:#fcfcfd;">
+                    <td></td>
+                    ${buildExchangeBlockUI(tIt, true)}
+                    ${generateDynamicCols(tIt)}
+                    </tr>`;
+                });
+            }
+        });
+        tArea.innerHTML = trH; renderPagH(renderObjGroup.length);
+    }
+
+    function renderPagH(ttl) {
+        const dom = document.getElementById('pagination'); dom.innerHTML = ''; if (ttl === 0) return; const pts = Math.ceil(ttl / pageSize); if (currentPage > pts) currentPage = 1;
+        dom.innerHTML += `<button class="page-btn" ${currentPage===1?'disabled':''} onclick="setPage(${currentPage-1})">⟨</button>`; let sView = Math.max(1, currentPage-2), eView = Math.min(pts, sView+4); if (eView - sView < 4) sView = Math.max(1, eView-4); if (sView > 1) { dom.innerHTML += `<button class="page-btn" onclick="setPage(1)">1</button>`; if (sView > 2) dom.innerHTML += `<span>...</span>`; }
+        for (let i = sView; i <= eView; i++) dom.innerHTML += `<button class="page-btn ${currentPage === i ? 'active':''}" onclick="setPage(${i})">${i}</button>`;
+        if (eView < pts) { if (eView < pts-1) dom.innerHTML += `<span>...</span>`; dom.innerHTML += `<button class="page-btn" onclick="setPage(${pts})">${pts}</button>`; } dom.innerHTML += `<button class="page-btn" ${currentPage===pts?'disabled':''} onclick="setPage(${currentPage+1})">⟩</button>`;
+    }
+
+    async function BootAndLinkNetwork() {
+        try { const rp = await fetch(`/api/futures/list`); const js = await rp.json(); masterOppDb = js.data || [];
+            document.getElementById('updateTime').innerText = `Готов: База прогружена в ОЗУ. (${masterOppDb.length})`; renderTableUI();
+            if (masterOppDb.length > 0 && allAvailableCoins.length === 0) { allAvailableCoins = [...new Set(masterOppDb.map(i => i.coin.toUpperCase()))].sort(); whitelistEngine.rebuildOptions(); whitelistEngine.renderChips(); blacklistEngine.rebuildOptions(); blacklistEngine.renderChips(); }
+        } catch(z) {}
+        const netBus = new EventSource('/futures/stream');
+        netBus.addEventListener('initial', (e) => {
+            masterOppDb = JSON.parse(e.data); document.getElementById('updateTime').innerText = `Sync: LIVE (Pulse Active ${new Date().toLocaleTimeString()})`; 
+            if (allAvailableCoins.length === 0 && masterOppDb.length > 0) { allAvailableCoins = [...new Set(masterOppDb.map(i => i.coin.toUpperCase()))].sort(); whitelistEngine.rebuildOptions(); whitelistEngine.renderChips(); blacklistEngine.rebuildOptions(); blacklistEngine.renderChips(); }
+            renderTableUI(); 
+        }); netBus.onerror = () => document.getElementById('updateTime').innerText = "Reconnect.. Server Interrupted";
+    }
+
+    BootAndLinkNetwork();
+</script>
+</body>
+</html>

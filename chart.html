@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Arbitrage Services - Live Chart</title>
+    
+    <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;600&display=swap" rel="stylesheet">
+    
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+        body { background: #ffffff; color: rgb(19, 19, 19); display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+
+        /* ========= ПЛАШКА КОНСТРУКТОРА SPREAD ========= */
+        #builderOverlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #ffffff; z-index: 9999; display: flex; align-items: center; justify-content: center; transition: opacity 0.3s ease; }
+        .builder-box { border: 1px solid rgb(19, 19, 19); border-radius: 12px; padding: 30px 40px; display: flex; gap: 20px; align-items: flex-end; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); background: #ffffff; min-width: 900px; justify-content: space-between; }
+        .b-col { display: flex; flex-direction: column; gap: 8px; position: relative; flex: 1; }
+        .b-label { font-size: 11px; color: rgb(100, 116, 139); font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; }
+
+        .c-select-head { height: 42px; border: 1px solid rgb(19, 19, 19); border-radius: 8px; padding: 0 14px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; background: #ffffff; transition: 0.15s; }
+        .c-select-head:hover { border-color: #64748b; }
+        .c-select-head .main { font-size: 13px; font-weight: 500; display:flex; align-items:center; }
+        .c-select-head .sub { color: rgb(19, 19, 19); font-size: 11px; font-family:'Roboto Mono',monospace; opacity: 0.9; }
+
+        .c-dropdown { position: absolute; top: calc(100% + 4px); left: 0; width: 100%; border: 1px solid rgb(19, 19, 19); background: #ffffff; z-index: 110; border-radius: 8px; overflow-y: auto; max-height: 250px; display: none; flex-direction: column; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
+        .c-dropdown.open { display: flex; }
+        .c-dropdown::-webkit-scrollbar { width: 6px; }
+        .c-dropdown::-webkit-scrollbar-thumb { background-color: rgb(203, 213, 225); border-radius: 6px; }
+        .c-item { padding: 12px 14px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; color: rgb(19, 19, 19); transition: background 0.1s; border-bottom: 1px solid #f1f5f9; }
+        .c-item:last-child { border-bottom: none; }
+        .c-item:hover { background: #f8fafc; }
+        .c-item .main { font-size: 13px; font-weight: 500; display:flex; align-items:center;}
+        .c-item .sub { opacity: 0.8; font-weight: 600; font-family: 'Roboto Mono', monospace; font-size: 11px; }
+
+        .btn-create { background: rgb(19, 19, 19); color: #ffffff; font-weight: 600; border-radius: 8px; padding: 0 30px; font-size: 14px; cursor: pointer; border: none; height: 42px; transition: 0.15s; flex-shrink: 0; }
+        .btn-create:hover { background: #334155; }
+        
+        .marg-icon-small { color:#ca8a04; font-size:10px; font-weight:800; margin-left:4px; border:1px solid #ca8a04; background:#fef08a; padding: 0 2px; border-radius:2px;}
+        .mr-ind { background: #fef08a; border:1px solid #ca8a04; color: #a16207; font-size:8px; font-weight:700; border-radius:2px; padding:0 3px; position:absolute; top:-6px; right:-14px; }
+
+        /* ========= ИНТЕРФЕЙС ГРАФИКОВ ========= */
+        .top-nav { height: 55px; width: 100%; border-bottom: 1px solid rgb(19, 19, 19); background: #ffffff; flex-shrink: 0; display: flex; align-items: center; padding: 0 20px; gap: 15px; }
+        .workspace { display: flex; flex: 1; height: calc(100% - 55px); width: 100%; overflow: hidden; }
+        .chart-area { flex: 1; display: flex; flex-direction: column; position: relative; background: #ffffff; }
+        
+        select.styled-tf { padding: 4px 10px; font-size: 13px; border-radius: 6px; border: 1px solid rgb(19, 19, 19); outline: none; background: #ffffff; cursor: pointer; color: rgb(19, 19, 19); font-weight: 600; height: 30px; }
+        #tvchart { flex: 1; position: relative; }
+
+        .sidebar { width: 440px; flex-shrink: 0; display: flex; flex-direction: column; background: #ffffff; overflow-y: auto; position: relative; padding: 24px; border-left: 1px solid rgb(19, 19, 19); }
+        .top-calculators { display: flex; justify-content: space-between; align-items: stretch; gap: 15px; margin-bottom: 25px; }
+        .calc-inputs { display: flex; flex-direction: column; gap: 10px; flex: 1; }
+        .inp-line { display: flex; justify-content: space-between; align-items: center; font-size: 12px; font-weight: 600; color: rgb(19, 19, 19); }
+        .inp-line input { width: 110px; padding: 5px 8px; font-size: 13px; font-family: 'Roboto Mono', monospace; border: 1px solid rgb(19, 19, 19); border-radius: 6px; outline: none; background: #ffffff; color: rgb(19, 19, 19); }
+        .calc-result { flex: 1; border: 1px solid rgb(19, 19, 19); border-radius: 12px; padding: 12px; font-size: 12px; line-height: 1.8; }
+        .calc-result div { display: flex; justify-content: space-between; }
+        .r-label { color: rgb(120, 120, 120); font-weight: 600; }
+
+        .ex-cards-zone { display: flex; gap: 15px; margin-bottom: 30px; }
+        .ex-box { flex: 1; border: 1px solid rgb(19, 19, 19); border-radius: 12px; display: flex; flex-direction: column; padding: 12px; font-size: 12px; }
+        .ex-box a { position:relative; color: rgb(51, 102, 204); font-weight: 700; text-decoration: none; margin-bottom: 12px; display: inline-block; font-size: 14px; text-align: center; }
+        .ex-box a:hover { text-decoration: underline; }
+        
+        .ex-stat-line { display: flex; width: 100%; justify-content: space-between; margin-bottom: 6px; align-items: center; color: rgb(19, 19, 19); font-weight: 600; }
+        .ex-stat-line:last-child { margin-bottom: 0; }
+
+        .ob-container { display: flex; gap: 20px; flex: 1; }
+        .ob-col { flex: 1; display: flex; flex-direction: column; font-size: 12px; }
+        .ob-header { display: flex; justify-content: space-between; font-weight: 700; margin-bottom: 8px; border-bottom: 1px solid rgb(19, 19, 19); padding-bottom: 6px; }
+        .ob-header h3 { font-size: 12px; font-weight: 700; color: rgb(19, 19, 19); }
+        
+        .ob-list-unified { display: flex; flex-direction: column; width: 100%; border-radius: 4px; overflow: hidden; }
+        .ob-row { display: flex; justify-content: space-between; position: relative; padding: 4px 6px; height: 24px; align-items: center; z-index: 1; font-family: 'Roboto Mono', monospace; font-weight: 600; }
+        .ob-bg { position: absolute; top: 0; bottom: 0; right: 0; z-index: -1; transition: width 0.15s ease-out; }
+        .ask-bg { background-color: rgb(255, 71, 97); }
+        .bid-bg { background-color: rgb(11, 186, 116); }
+    </style>
+</head>
+<body>
+
+<div id="builderOverlay">
+    <div class="builder-box">
+        <div class="b-col" style="z-index: 104; max-width: 190px;">
+            <div class="b-label">Тип</div>
+            <div class="c-select-head" onclick="toggleDropdown('typeDrop')">
+                <span class="main" id="selTypeName">Фьюч-Маржа</span><span class="sub">▼</span>
+            </div>
+            <div class="c-dropdown" id="typeDrop">
+                <div class="c-item" onclick="actionSetMode('ff')"><span class="main">Фьючерс-Фьючерс</span><span class="sub"></span></div>
+                <div class="c-item" onclick="actionSetMode('sf')"><span class="main">Спот-Фьючерс</span><span class="sub"></span></div>
+                <div class="c-item" onclick="actionSetMode('fm')"><span class="main">Фьюч-Маржа</span><span class="sub"></span></div>
+            </div>
+        </div>
+        <div class="b-col" style="z-index: 103;">
+            <div class="b-label">Пара</div>
+            <div class="c-select-head" onclick="toggleDropdown('coinDrop')" id="headCoin">
+                <span class="main" id="selCoinName">...</span><span class="sub" id="selCoinSpread">0.0% ▼</span>
+            </div>
+            <div class="c-dropdown" id="coinDrop"></div>
+        </div>
+        <div class="b-col" style="z-index: 102;">
+            <div class="b-label">Лонг</div>
+            <div class="c-select-head" onclick="toggleDropdown('longDrop')" id="headLong">
+                <span class="main" id="selLongName">...</span><span class="sub" id="selLongStats">▼</span>
+            </div>
+            <div class="c-dropdown" id="longDrop"></div>
+        </div>
+        <div class="b-col" style="z-index: 101;">
+            <div class="b-label">Шорт</div>
+            <div class="c-select-head" onclick="toggleDropdown('shortDrop')" id="headShort">
+                <span class="main" id="selShortName">...</span><span class="sub" id="selShortStats">▼</span>
+            </div>
+            <div class="c-dropdown" id="shortDrop"></div>
+        </div>
+        <button class="btn-create" onclick="executeTerminalLaunch()">Создать</button>
+    </div>
+</div>
+
+<div class="top-nav">
+    <h3 id="chartTitlePair" style="font-size: 22px; font-weight: 700; color: rgb(19, 19, 19); text-transform: uppercase;">...</h3>
+    <select id="tfSelect" class="styled-tf">
+        <option value="5">5м</option><option value="15">15м</option><option value="60">1ч</option><option value="240">4ч</option>
+    </select>
+</div>
+<div class="workspace">
+    <div class="chart-area"><div id="tvchart"></div></div>
+    <div class="sidebar">
+        <div class="top-calculators">
+            <div class="calc-inputs">
+                <div class="inp-line"><span class="r-label">Вход %:</span> <input type="number" id="inputInPercent" step="0.1" placeholder="0.0"></div>
+                <div class="inp-line"><span class="r-label">Выход %:</span><input type="number" id="inputOutPercent" step="0.1" placeholder="0.0"></div>
+                <div class="inp-line"><span class="r-label">Объем $:</span> <input type="number" id="inputVolume" step="10" placeholder="0"></div>
+            </div>
+            <div class="calc-result">
+                <div><span class="r-label">Вход:</span><span id="rIn" style="color: rgb(11, 186, 116); font-weight: 700;">0.00%</span></div>
+                <div><span class="r-label">Выход:</span><span id="rOut" style="color: rgb(255, 71, 97); font-weight: 700;">0.00%</span></div>
+                <div><span class="r-label">Спред:</span><span id="rSpd" style="font-weight: 700;">0.00%</span></div>
+                <div><span class="r-label">Комиссия:</span><span id="rCom" style="font-weight: 700;">0.00%</span></div>
+            </div>
+        </div>
+        <div class="ex-cards-zone">
+            <div class="ex-box" id="eboxLeft">
+                <div style="display:flex; justify-content:center; margin-bottom: 12px;">
+                     <a href="#" id="lnkEx1" class="exchange-name" target="_blank">...</a>
+                </div>
+                <div class="ex-stat-line stF" style="display:none;"><span class="r-label">Ставка:</span> <span id="stRatesL">0%</span></div>
+                <div class="ex-stat-line stF" style="display:none;"><span class="r-label">Отклонение:</span> <span id="stDevsL">0%</span></div>
+                <div class="ex-stat-line stF" style="display:none;"><span class="r-label">Период:</span> <span id="stPeriodL">-</span></div>
+                <div class="ex-stat-line"><span class="r-label">Стакан:</span> <span id="stBookL">0%</span></div>
+            </div>
+            <div class="ex-box" id="eboxRight">
+                <div style="display:flex; justify-content:center; margin-bottom: 12px;">
+                     <a href="#" id="lnkEx2" class="exchange-name" target="_blank">...</a>
+                </div>
+                <div class="ex-stat-line stF" style="display:none;"><span class="r-label">Ставка:</span> <span id="stRatesS">0%</span></div>
+                <div class="ex-stat-line stF" style="display:none;"><span class="r-label">Отклонение:</span> <span id="stDevsS">0%</span></div>
+                <div class="ex-stat-line stF" style="display:none;"><span class="r-label">Период:</span> <span id="stPeriodS">-</span></div>
+                <div class="ex-stat-line"><span class="r-label">Стакан:</span> <span id="stBookS">0%</span></div>
+            </div>
+        </div>
+        <div class="ob-container">
+            <div class="ob-col"><div class="ob-header"><h3>Цена</h3><h3>Объем $</h3></div><div class="ob-list-unified" id="obUnified1"></div></div>
+            <div class="ob-col"><div class="ob-header"><h3>Цена</h3><h3>Объем $</h3></div><div class="ob-list-unified" id="obUnified2"></div></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const CHARTER_HTTP = `${location.protocol}//${location.hostname}:8081`;
+    const CHARTER_WS   = `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.hostname}:8081`;
+
+    let params = new URLSearchParams(window.location.search);
+    let selectedMode = 'ff'; 
+    let incomingBuy = params.get('buyEx') || '';
+    let incomingSell = params.get('sellEx') || '';
+
+    if (incomingBuy || incomingSell) {
+        if (incomingBuy.includes('_spot') || incomingSell.includes('_spot')) selectedMode = 'sf';
+        else if (incomingBuy.includes('_margin') || incomingSell.includes('_margin')) selectedMode = 'fm';
+        else selectedMode = 'ff';
+    }
+
+    let tempContext = { coin: params.get('coin'), buyExCode: incomingBuy, sellExCode: incomingSell };
+    
+    // 🔴 Поддержка правильного написания имени: CoinEx и BingX
+    const clnNm = (nameStr) => { 
+        if (!nameStr) return ''; 
+        let cl = nameStr.replace('_spot', '').replace('_futures', '').replace('_margin', ''); 
+        return cl.charAt(0).toUpperCase() + cl.slice(1).replace('xc', 'XC').replace('oinex', 'oinEx').replace('ingx', 'ingX'); 
+    };
+
+    function buildExchangeUrl(exRaw, symbol) {
+        if (!exRaw || !symbol) return '#';
+        const parts = exRaw.split('_');
+        const ex = parts[0].toLowerCase();
+        const market = parts.length > 1 ? parts[1].toLowerCase() : 'spot';
+        let sym = symbol.toUpperCase();
+        
+        let base = sym;
+        base = base.replace(/-USDT-SWAP$/i, '').replace(/_USDT$/i, '').replace(/USDTM$/i, '').replace(/-USDT$/i, '').replace(/USDT$/i, '');
+                   
+        switch(ex) {
+            case 'binance':
+                if (market === 'futures') return `https://www.binance.com/en/futures/${sym}`;
+                if (market === 'margin') return `https://www.binance.com/en/trade/${base}_USDT?type=cross`;
+                return `https://www.binance.com/en/trade/${base}_USDT?type=spot`;
+            case 'bybit':
+                if (market === 'futures') return `https://www.bybit.com/trade/usdt/${sym}`;
+                return `https://www.bybit.com/ru-RU/trade/spot/${base}/USDT`;
+            case 'okx':
+                let okxB = base.toLowerCase();
+                if (market === 'futures') return `https://www.okx.com/trade-swap/${okxB}-usdt-swap`;
+                if (market === 'margin') return `https://www.okx.com/ru/trade-margin/${okxB}-usdt`;
+                return `https://www.okx.com/trade-spot/${okxB}-usdt`;
+            case 'bitget':
+                if (market === 'futures') return `https://www.bitget.com/futures/usdt/${sym}`;
+                if (market === 'margin') return `https://www.bitget.com/spot/${base}USDT?type=isolated`;
+                return `https://www.bitget.com/spot/${base}USDT`;
+            case 'mexc':
+                if (market === 'futures') return `https://www.mexc.com/ru-RU/futures/${base}_USDT?type=linear_swap`;
+                return `https://www.mexc.com/ru-RU/exchange/${base}_USDT?_from=search_spot_trade`;
+            case 'kucoin':
+                if (market === 'futures') return `https://www.kucoin.com/trade/futures/${sym}`;
+                if (market === 'margin') return `https://www.kucoin.com/trade/margin/${base}-USDT`;
+                return `https://www.kucoin.com/trade/${base}-USDT`;
+            case 'coinex': { 
+                let baseLow = base.toLowerCase();
+                if (market === 'futures') return `https://www.coinex.com/ru/futures/${baseLow}-usdt`;
+                if (market === 'margin') return `https://www.coinex.com/ru/exchange/${baseLow}-usdt#margin`;
+                return `https://www.coinex.com/ru/exchange/${baseLow}-usdt`;
+            }
+            case 'bingx': { // 🔴 ВНЕЛИ РОУТЫ БИНКСА НА ГРАФИКИ
+                let baseUp = base.toUpperCase();
+                if (market === 'futures') return `https://bingx.com/ru/perpetual/${baseUp}-USDT`;
+                return `https://bingx.com/ru/spot/${baseUp}USDT`;
+            }
+            default: return '#';
+        }
+    }
+
+    let globalApiDb = [];
+
+    function toggleDropdown(id) {
+        const drList = ['typeDrop', 'coinDrop', 'longDrop', 'shortDrop'];
+        drList.forEach(k => { if(k !== id && document.getElementById(k)) document.getElementById(k).classList.remove('open'); });
+        document.getElementById(id).classList.toggle('open');
+    }
+
+    document.addEventListener('click', function(event) {
+        if (!event.target.closest('.b-col')) {
+            const drList = ['typeDrop', 'coinDrop', 'longDrop', 'shortDrop'];
+            drList.forEach(k => { if(document.getElementById(k)) document.getElementById(k).classList.remove('open'); });
+        }
+    });
+
+    async function initConstructor() {
+        try {
+            const resp = await fetch('/api/futures/list'); const dt = await resp.json(); globalApiDb = dt.data || [];
+            if (!globalApiDb.length) return;
+            actionSetMode(selectedMode, true); 
+        } catch(e) {}
+    }
+    
+    function actionSetMode(mCode, initCall=false) {
+        document.getElementById('typeDrop').classList.remove('open');
+        selectedMode = mCode;
+        
+        let labelDisplay = 'Фьючерс-Фьючерс';
+        if(mCode === 'sf') labelDisplay = 'Спот-Фьючерс';
+        if(mCode === 'fm') labelDisplay = 'Фьюч-Маржа';
+        document.getElementById('selTypeName').innerText = labelDisplay;
+
+        let allowedOpp = globalApiDb.filter(x => {
+            let bExStr = x.buy_exchange;
+            let sExStr = x.sell_exchange;
+
+            if (selectedMode === 'sf') return bExStr.includes('spot') && sExStr.includes('futures'); 
+            if (selectedMode === 'fm') return bExStr.includes('futures') && sExStr.includes('margin'); 
+            return (bExStr.includes('futures') && sExStr.includes('futures')); 
+        });
+
+        let coinDict = {};
+        allowedOpp.forEach(x => { if(!coinDict[x.coin] || x.spread > coinDict[x.coin].spread) coinDict[x.coin] = x; });
+        let coinList = Object.values(coinDict).sort((a,b) => b.spread - a.spread);
+
+        let dCoin = document.getElementById('coinDrop'); dCoin.innerHTML = '';
+        if(coinList.length === 0) {
+            dCoin.innerHTML = `<div class="c-item"><span class="main">Ожидание...</span></div>`;
+            return;
+        }
+        
+        coinList.forEach(p => {
+            let strC = p.spread > 0 ? 'rgb(11,186,116)' : 'rgb(19,19,19)';
+            dCoin.innerHTML += `<div class="c-item" onclick="actionPickCoin('${p.coin}')">
+              <span class="main">${p.coin}USDT</span><span class="sub" style="color:${strC}">${p.spread.toFixed(2)}% ▲</span>
+            </div>`;
+        });
+
+        let toSelectCoin = coinList[0].coin;
+        if(initCall && tempContext.coin && coinDict[tempContext.coin]) toSelectCoin = tempContext.coin;
+        actionPickCoin(toSelectCoin, initCall);
+    }
+
+    function actionPickCoin(cName, initCall=false) {
+        document.getElementById('coinDrop').classList.remove('open'); cName = cName.toUpperCase(); tempContext.coin = cName;
+        
+        let bestBase = null; let bBScore = -999;
+        globalApiDb.forEach(e => {
+            if(e.coin.toUpperCase() !== cName) return;
+            let validOpp = false;
+            if(selectedMode === 'sf') validOpp = e.buy_exchange.includes('spot') && e.sell_exchange.includes('futures');
+            else if(selectedMode === 'fm') validOpp = e.buy_exchange.includes('futures') && e.sell_exchange.includes('margin');
+            else if(selectedMode === 'ff') validOpp = e.buy_exchange.includes('futures') && e.sell_exchange.includes('futures');
+            if (validOpp && e.spread > bBScore) { bestBase = e; bBScore = e.spread; }
+        });
+
+        if(bestBase) {
+            document.getElementById('selCoinName').innerText = `${cName}USDT`;
+            document.getElementById('selCoinSpread').innerText = `${bestBase.spread.toFixed(2)}% ▲`;
+        }
+
+        let arrLE = [], arrSE = [];
+        globalApiDb.filter(x => x.coin.toUpperCase() === cName).forEach(e => {
+            let bxS = e.buy_exchange;
+            let sxS = e.sell_exchange;
+            
+            let validOpp = false;
+            if(selectedMode === 'sf') validOpp = bxS.includes('spot') && sxS.includes('futures');
+            if(selectedMode === 'fm') validOpp = bxS.includes('futures') && sxS.includes('margin');
+            if(selectedMode === 'ff') validOpp = bxS.includes('futures') && sxS.includes('futures');
+
+            if(validOpp) {
+                if(!arrLE.find(k => k.name === bxS)) arrLE.push({name: bxS, sSym: e.buy_symbol, i: e.buy_interval, f: e.funding_rates[bxS]});
+                if(!arrSE.find(k => k.name === sxS)) arrSE.push({name: sxS, sSym: e.sell_symbol, i: e.sell_interval, f: e.funding_rates[sxS]});
+            }
+        });
+
+        const populateOptions = (isLongSide, dataArr) => {
+            let targetId = isLongSide ? 'longDrop' : 'shortDrop';
+            document.getElementById(targetId).innerHTML = '';
+            
+            dataArr.forEach(p => {
+                let isFlat = p.name.includes('spot') || p.name.includes('margin'); 
+                let infoText = isFlat ? "" : `${p.f ? p.f.toFixed(2) : 0.00}% ${p.i || 8}ч`;
+                let mBadge = p.name.includes('margin') ? '<span class="marg-icon-small">M</span>' : '';
+                document.getElementById(targetId).innerHTML += `
+                    <div class="c-item" onclick="actionSetLeg(${isLongSide}, '${p.name}', '${p.sSym}')">
+                       <span class="main">${clnNm(p.name)}${mBadge}</span>
+                       <span class="sub">${infoText}</span>
+                    </div>`;
+            });
+        };
+
+        populateOptions(true, arrLE); populateOptions(false, arrSE); 
+
+        let preSelectLong = arrLE[0], preSelectShort = arrSE[0];
+        if (initCall && tempContext.buyExCode && arrLE.find(k => k.name === tempContext.buyExCode)) preSelectLong = arrLE.find(k => k.name === tempContext.buyExCode);
+        if (initCall && tempContext.sellExCode && arrSE.find(k => k.name === tempContext.sellExCode)) preSelectShort = arrSE.find(k => k.name === tempContext.sellExCode);
+
+        if(preSelectLong) actionSetLeg(true, preSelectLong.name, preSelectLong.sSym);
+        if(preSelectShort) actionSetLeg(false, preSelectShort.name, preSelectShort.sSym);
+    }
+
+    function actionSetLeg(isLong, exKey, symPair) {
+        document.querySelectorAll('.c-dropdown').forEach(d => d.classList.remove('open'));
+        let dnm = document.getElementById(isLong ? 'selLongName' : 'selShortName');
+        let dst = document.getElementById(isLong ? 'selLongStats' : 'selShortStats');
+        
+        let tOpp = null;
+        globalApiDb.forEach(x => {
+             if (x.coin !== tempContext.coin) return;
+             if (isLong && x.buy_exchange === exKey) tOpp = x;
+             else if (!isLong && x.sell_exchange === exKey) tOpp = x;
+        });
+
+        if(!tOpp) return;
+        
+        dnm.innerHTML = clnNm(exKey); 
+        
+        if (exKey.includes('spot') || exKey.includes('margin')) { 
+            dst.innerText = "▼"; 
+        } else {
+            let refV = isLong ? tOpp.buy_interval : tOpp.sell_interval; let refF = (tOpp.funding_rates || {})[exKey] || 0.00;
+            dst.innerText = `${refF.toFixed(2)}% ${refV || 8}ч ▼`;
+        }
+
+        if(isLong) { tempContext.buyExCode = exKey; tempContext.bSym = symPair; } else { tempContext.sellExCode = exKey; tempContext.sSym = symPair; }
+    }
+
+
+    /* ======= КНОПКА ЗАПУСКА ======== */
+    function executeTerminalLaunch() {
+        document.getElementById('builderOverlay').style.opacity = '0';
+        setTimeout(() => { document.getElementById('builderOverlay').style.display = 'none'; }, 300);
+
+        const buildURL = new URL(window.location);
+        buildURL.searchParams.set('buyEx', tempContext.buyExCode);
+        buildURL.searchParams.set('sellEx', tempContext.sellExCode);
+        buildURL.searchParams.set('bSym', tempContext.bSym);
+        buildURL.searchParams.set('sSym', tempContext.sSym);
+        buildURL.searchParams.set('coin', tempContext.coin);
+        window.history.replaceState({}, '', buildURL);
+
+        bMul = parseSymbolMetaJS(tempContext.bSym).multiplier; sMul = parseSymbolMetaJS(tempContext.sSym).multiplier;
+        currentTfSeconds = parseInt(document.getElementById('tfSelect').value) * 60;
+
+        document.getElementById('chartTitlePair').innerText = `${tempContext.coin}USDT`; 
+        
+        let buyNameRawCard = clnNm(tempContext.buyExCode);
+        if(tempContext.buyExCode.includes('margin')) buyNameRawCard += '<span class="mr-ind">M</span>';
+        let sellNameRawCard = clnNm(tempContext.sellExCode);
+        if(tempContext.sellExCode.includes('margin')) sellNameRawCard += '<span class="mr-ind">M</span>';
+        
+        document.getElementById('lnkEx1').innerHTML = buyNameRawCard;
+        document.getElementById('lnkEx2').innerHTML = sellNameRawCard;
+
+        document.getElementById('lnkEx1').href = buildExchangeUrl(tempContext.buyExCode, tempContext.bSym);
+        document.getElementById('lnkEx2').href = buildExchangeUrl(tempContext.sellExCode, tempContext.sSym);
+        
+        const isBFlat = tempContext.buyExCode.includes('spot') || tempContext.buyExCode.includes('margin');
+        const isSFlat = tempContext.sellExCode.includes('spot') || tempContext.sellExCode.includes('margin');
+        
+        document.querySelectorAll('#eboxLeft .stF').forEach(f => f.style.display = isBFlat ? 'none' : 'flex');
+        document.querySelectorAll('#eboxRight .stF').forEach(f => f.style.display = isSFlat ? 'none' : 'flex');
+
+        loadHistory(); connectLive(); updateExchangeStats();
+        if (window.bgIntervalExchanges) clearInterval(window.bgIntervalExchanges);
+        window.bgIntervalExchanges = setInterval(updateExchangeStats, 5000);
+    }
+    document.addEventListener("DOMContentLoaded", initConstructor);
+
+    /* ======================================================== */
+    /* ТРЕЙДИНГ ЧАРТ ЛОГИКА  */
+    /* ======================================================== */
+    let bMul = 1.0; let sMul = 1.0; let lastCandle = null; let activeVertLines = [];
+    class VertLine {
+        constructor(chart, time, text, color = 'rgba(19, 19, 19, 0.15)') {
+            this._chart = chart; this._time = time; this._text = text; this._color = color;
+            this._paneViews = [{ update: () => {}, renderer: () => ({ draw: (tgt) => { tgt.useBitmapCoordinateSpace(scp => {
+                const ctx = scp.context; const x = this._chart.timeScale().timeToCoordinate(this._time); if (x === null) return;
+                const hR = scp.horizontalPixelRatio; const vR = scp.verticalPixelRatio; const H = scp.bitmapSize.height;
+                ctx.strokeStyle = this._color; ctx.lineWidth = 1.2 * hR; ctx.setLineDash([4 * hR, 4 * vR]); 
+                ctx.beginPath(); ctx.moveTo(x * hR, 0); ctx.lineTo(x * hR, H); ctx.stroke(); ctx.setLineDash([]); 
+                if (this._text) { ctx.font = `bold ${10 * vR}px -apple-system, sans-serif`; ctx.fillStyle = 'rgba(19, 19, 19, 0.85)'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+                const lns = this._text.split('\n'); const base = H - 28 * vR; lns.forEach((l, i) => { ctx.fillText(l, x * hR, base + (i * 12 * vR)); });}
+            });}}) }];
+        } updateAllViews() {} paneViews() { return this._paneViews; } timeAxisViews() { return []; } priceAxisViews() { return []; }
+    }
+    const chartOptions = { layout: { textColor: '#131313', background: { type: 'solid', color: '#ffffff' } }, rightPriceScale: { autoScale: true, borderVisible: false }, timeScale: { timeVisible: true, secondsVisible: false, borderColor: 'rgba(19, 19, 19, 0.06)' }, grid: { vertLines: { visible: false }, horzLines: { color: 'rgba(19, 19, 19, 0.06)', style: 2 } }, crosshair: { mode: 0 }};
+    const chart = LightweightCharts.createChart(document.getElementById('tvchart'), chartOptions);
+    const candleSeries = chart.addCandlestickSeries({ upColor: 'rgb(11, 186, 116)', downColor: 'rgb(255, 71, 97)', borderVisible: false, wickUpColor: 'rgb(11, 186, 116)', wickDownColor: 'rgb(255, 71, 97)' });
+    candleSeries.createPriceLine({ price: 0.0, color: '#2563eb', lineWidth: 1.5, lineStyle: 1, axisLabelVisible: true, title: '0.00%'});
+    window.addEventListener('resize', () => chart.resize(document.getElementById('tvchart').clientWidth, document.getElementById('tvchart').clientHeight));
+    
+    document.getElementById('tfSelect').addEventListener('change', (e) => {
+        currentTfSeconds = parseInt(e.target.value) * 60; const navU = new URL(window.location); navU.searchParams.set('tf', e.target.value); window.history.replaceState({}, '', navU);
+        candleSeries.setData([]); lastCandle = null; loadHistory();
+    });
+
+    async function loadHistory() {
+        try { const reqString = window.location.search; const res = await fetch(`${CHARTER_HTTP}/api/chart/spread${reqString}`); const data = await res.json();
+            if (data && data.length) {
+                const trMap = data.map(item => ({ time: Math.floor(new Date(item.t.replace(" ", "T") + "Z").getTime() / 1000), open: item.o, high: item.h, low: item.l, close: item.c }));
+                candleSeries.setData(trMap); lastCandle = { ...trMap[trMap.length - 1] }; const countPoints = Math.min(trMap.length, 150);
+                if (countPoints > 0) { chart.timeScale().setVisibleRange({ from: trMap[trMap.length - countPoints].time, to: trMap[trMap.length - 1].time }); }
+                loadFundingMarkers();
+            }
+        } catch (e) {}
+    }
+
+    async function loadFundingMarkers() {
+        activeVertLines.forEach(line => { try { candleSeries.detachPrimitive(line); } catch(err){} }); activeVertLines = []; let timeStampMap = {};
+        const gatherRates = async(networkExName, netSymbolCode) => { 
+            if(networkExName.includes('spot') || networkExName.includes('margin')) return; 
+            try { let response = await fetch(`${CHARTER_HTTP}/api/chart/funding?ex=${networkExName}&sym=${netSymbolCode}`); let listRes = await response.json(); 
+                if (listRes && listRes.length > 0) { listRes.forEach(itemInfo => { let roundedTime = Math.round(itemInfo.timestamp / 1000 / 3600) * 3600; if (!timeStampMap[roundedTime]) timeStampMap[roundedTime] = {}; timeStampMap[roundedTime][clnNm(networkExName)] = itemInfo.rate; }); }
+            } catch(exSkip) {}
+        };
+        await gatherRates(tempContext.buyExCode, tempContext.bSym); await gatherRates(tempContext.sellExCode, tempContext.sSym);
+
+        for (const [timestampStr, valMap] of Object.entries(timeStampMap)) {
+            let labelBlocks = []; let nBL = clnNm(tempContext.buyExCode); let nBS = clnNm(tempContext.sellExCode);
+            if (valMap[nBL] !== undefined) labelBlocks.push(nBL + " " + (valMap[nBL]*100).toFixed(2) + "%");
+            if (valMap[nBS] !== undefined && nBL !== nBS) labelBlocks.push(nBS + " " + (valMap[nBS]*100).toFixed(2) + "%");
+            if (labelBlocks.length > 0) { let makeLineObj = new VertLine(chart, parseInt(timestampStr), labelBlocks.join('\n')); candleSeries.attachPrimitive(makeLineObj); activeVertLines.push(makeLineObj); }
+        }
+    }
+
+    function parseSymbolMetaJS(sym) { 
+        let strRaw = sym.toUpperCase().replace(/[-_]/g, ''); ["USDTM", "USDT", "USDC", "SWAP", "PERP", "USD"].forEach(k => { strRaw = strRaw.replace(new RegExp(`${k}$`), ''); }); 
+        let calculatedMultiplier = 1.0; 
+        if(!strRaw.includes("1INCH")) { ["10000000", "1000000", "100000", "10000", "1000", "100", "10"].forEach(prefixItem => { if (strRaw.startsWith(prefixItem)) calculatedMultiplier = parseFloat(prefixItem); }); }
+        return { base: strRaw, multiplier: calculatedMultiplier }; 
+    }
+
+    const getMedianVal = (arr) => { const s = [...arr].sort((a,b)=>a-b); const m = Math.floor(s.length/2); return s.length % 2 !== 0 ? s[m] : (s[m-1]+s[m])/2; };
+
+    function calcVWAP(orders, expectedVolSize, dividerModulator) {
+        if (!orders || orders.length === 0) return 0; if (expectedVolSize <= 0) return orders[0].price / dividerModulator;
+        let remVol = expectedVolSize, qtyAccum = 0, amountUSDAccum = 0;
+        for (let xNum = 0; xNum < orders.length; xNum++) {
+            let realItemPrice = orders[xNum].price / dividerModulator; let realQuantity = orders[xNum].qty; let totalRowAmountUsd = realItemPrice * realQuantity;
+            if (remVol >= totalRowAmountUsd) { qtyAccum += realQuantity; amountUSDAccum += totalRowAmountUsd; remVol -= totalRowAmountUsd; } else { qtyAccum += remVol / realItemPrice; amountUSDAccum += remVol; break; }
+        } return qtyAccum > 0 ? (amountUSDAccum / qtyAccum) : (orders[0].price / dividerModulator);
+    }
+    
+    function evalSF(pa, pb) { let fractionNum = pb / pa; for(let v of [0.0001, 0.001, 0.01, 0.1, 1.0, 10.0, 100.0, 1000.0]) { if(fractionNum > v * 0.7 && fractionNum < v * 1.3) return v; } return 1; }
+
+    const renderUnifiedOb = (domId, arrAsksObj, arrBidsObj, inputAmountUsdTarget, localSymbolMultipierFactor) => {
+        let blockEl = document.getElementById(domId); if(!blockEl) return; 
+        
+        let clA = arrAsksObj && arrAsksObj.length > 0 ? arrAsksObj.slice(0, 5).reverse() : []; 
+        let clB = arrBidsObj && arrBidsObj.length > 0 ? arrBidsObj.slice(0, 5) : []; 
+        
+        if(clA.length === 0 && clB.length === 0) {
+             blockEl.innerHTML = "<p style='color:grey; padding: 10px; font-weight: normal'>Загрузка ликвидности...</p>"; 
+             return; 
+        }
+
+        let maximalVisualValueAmount = Math.max(...clA.map(e => e.price / localSymbolMultipierFactor * e.qty),...clB.map(e => e.price / localSymbolMultipierFactor * e.qty)) || 1;
+        let resBuildCodeHTML = '';
+
+        clA.forEach((structObX) => { 
+            let fVV = structObX.price / localSymbolMultipierFactor * structObX.qty; let widthV = Math.min((fVV / maximalVisualValueAmount) * 100, 100); 
+            let pFx = Number(structObX.price).toFixed(Number(structObX.price) > 10 ? 4 : 5); let outTV = fVV > 1000 ? (fVV/1000).toFixed(1)+'k' : fVV.toFixed(2);
+            resBuildCodeHTML += `<div class="ob-row"><p style="color: rgb(255, 71, 97);">${pFx}</p><p style="color: rgb(255, 71, 97);">${outTV}</p><div class="ob-bg ask-bg" style="width: ${widthV}%; opacity: 0.2;"></div></div>`; 
+        });
+
+        clB.forEach((structObY) => { 
+            let fVV = structObY.price / localSymbolMultipierFactor * structObY.qty; let widthV = Math.min((fVV / maximalVisualValueAmount) * 100, 100); 
+            let pFx = Number(structObY.price).toFixed(Number(structObY.price) > 10 ? 4 : 5); let outTV = fVV > 1000 ? (fVV/1000).toFixed(1)+'k' : fVV.toFixed(2);
+            resBuildCodeHTML += `<div class="ob-row"><p style="color: rgb(11, 186, 116);">${pFx}</p><p style="color: rgb(11, 186, 116);">${outTV}</p><div class="ob-bg bid-bg" style="width: ${widthV}%; opacity: 0.2;"></div></div>`; 
+        });
+        blockEl.innerHTML = resBuildCodeHTML;
+    };
+
+    let lastWsPkgReceivedStorageItem = null, epsBufEngineX = [], xpsBufEngineY = [], globalCommConfigCalcValue = 0;
+    document.getElementById('inputVolume').addEventListener('input', () => { runRebuilderOfSpreadsMathCalculatorFlows(lastWsPkgReceivedStorageItem); });
+
+    function runRebuilderOfSpreadsMathCalculatorFlows(pKData) {
+        lastWsPkgReceivedStorageItem = pKData; 
+        
+        if (!pKData || !pKData.l_asks || !pKData.s_bids || !pKData.l_bids || !pKData.s_asks) return; 
+
+        const l_asksLen = pKData.l_asks.length;
+        const s_bidsLen = pKData.s_bids.length;
+        const l_bidsLen = pKData.l_bids.length;
+        const s_asksLen = pKData.s_asks.length;
+        
+        const volumeLimitToUseInFormulaValNumEngineStrValueFactorAsScaleObjUsValValX1PointXOutDataFromHTMLStrFormIntParam = parseFloat(document.getElementById('inputVolume').value) || 0;
+        let mV_1 = 0, mV_2 = 0;
+        
+        if (l_asksLen > 0 && s_bidsLen > 0) {
+            const spcMultiplierCoefficientScaleRel = evalSF(pKData.l_asks[0].price / bMul, pKData.s_bids[0].price / sMul);
+            const pE1 = calcVWAP(pKData.l_asks, volumeLimitToUseInFormulaValNumEngineStrValueFactorAsScaleObjUsValValX1PointXOutDataFromHTMLStrFormIntParam, bMul) * spcMultiplierCoefficientScaleRel;
+            const pE2 = calcVWAP(pKData.s_bids, volumeLimitToUseInFormulaValNumEngineStrValueFactorAsScaleObjUsValValX1PointXOutDataFromHTMLStrFormIntParam, sMul);
+            let curEp = pE1 > 0 ? (pE2 - pE1) / pE1 * 100 : 0;
+            epsBufEngineX.push(curEp); if(epsBufEngineX.length > 5) epsBufEngineX.shift(); 
+            mV_1 = getMedianVal(epsBufEngineX);
+        }
+
+        if (l_bidsLen > 0 && s_asksLen > 0) {
+            const spcMultiplierCoefficientScaleRel2 = evalSF(pKData.l_bids[0].price / bMul, pKData.s_asks[0].price / sMul);
+            const pXL = calcVWAP(pKData.l_bids, volumeLimitToUseInFormulaValNumEngineStrValueFactorAsScaleObjUsValValX1PointXOutDataFromHTMLStrFormIntParam, bMul) * spcMultiplierCoefficientScaleRel2;
+            const pXS = calcVWAP(pKData.s_asks, volumeLimitToUseInFormulaValNumEngineStrValueFactorAsScaleObjUsValValX1PointXOutDataFromHTMLStrFormIntParam, sMul);
+            let curXp = pXS > 0 ? (pXL - pXS) / pXS * 100 : 0;
+            xpsBufEngineY.push(curXp); if(xpsBufEngineY.length > 5) xpsBufEngineY.shift();
+            mV_2 = getMedianVal(xpsBufEngineY);
+        }
+
+        let nttR = mV_1 + mV_2 - globalCommConfigCalcValue;
+        
+        document.getElementById('rIn').innerText = (mV_1 > 0 ? '+' : '') + mV_1.toFixed(2) + '%'; document.getElementById('rIn').style.color = mV_1 > 0 ? 'rgb(11, 186, 116)' : 'rgb(255, 71, 97)';
+        document.getElementById('rOut').innerText = (mV_2 > 0 ? '+' : '') + mV_2.toFixed(2) + '%'; document.getElementById('rOut').style.color = mV_2 > 0 ? 'rgb(11, 186, 116)' : 'rgb(255, 71, 97)';
+        document.getElementById('rSpd').innerText = (nttR > 0 ? '+' : '') + nttR.toFixed(2) + '%';
+        
+        let ss = Math.floor(Date.now() / 1000); let ts=ss-(ss%currentTfSeconds);
+        if (lastCandle && mV_1 !== 0) {
+            if(ts > lastCandle.time) { lastCandle = { time: ts, open: lastCandle.close, high: mV_1, low: mV_1, close: mV_1 }; } 
+            else { lastCandle.close = mV_1; lastCandle.high = Math.max(lastCandle.high, mV_1); lastCandle.low = Math.min(lastCandle.low, mV_1); } 
+            candleSeries.update(lastCandle);
+        }
+
+        if(l_asksLen > 0 && l_bidsLen > 0) document.getElementById('stBookL').innerText = ((pKData.l_asks[0].price - pKData.l_bids[0].price) / pKData.l_bids[0].price * 100).toFixed(2) + '%';
+        if(s_asksLen > 0 && s_bidsLen > 0) document.getElementById('stBookS').innerText = ((pKData.s_asks[0].price - pKData.s_bids[0].price) / pKData.s_bids[0].price * 100).toFixed(2) + '%';
+
+        renderUnifiedOb('obUnified1', pKData.l_asks, pKData.l_bids, volumeLimitToUseInFormulaValNumEngineStrValueFactorAsScaleObjUsValValX1PointXOutDataFromHTMLStrFormIntParam, bMul); 
+        renderUnifiedOb('obUnified2', pKData.s_asks, pKData.s_bids, volumeLimitToUseInFormulaValNumEngineStrValueFactorAsScaleObjUsValValX1PointXOutDataFromHTMLStrFormIntParam, sMul);
+    }
+
+    function updateExchangeStats() {
+        if (!globalApiDb.length) return;
+        const tgO = globalApiDb.find(f_v_ObjXValSearchElementObjResultValueNumExMatchResultTargetInObjItemSystemLogicParamFormSysValReturnMathOutput => f_v_ObjXValSearchElementObjResultValueNumExMatchResultTargetInObjItemSystemLogicParamFormSysValReturnMathOutput.coin === tempContext.coin && ((f_v_ObjXValSearchElementObjResultValueNumExMatchResultTargetInObjItemSystemLogicParamFormSysValReturnMathOutput.buy_exchange === tempContext.buyExCode && f_v_ObjXValSearchElementObjResultValueNumExMatchResultTargetInObjItemSystemLogicParamFormSysValReturnMathOutput.sell_exchange === tempContext.sellExCode) || (f_v_ObjXValSearchElementObjResultValueNumExMatchResultTargetInObjItemSystemLogicParamFormSysValReturnMathOutput.buy_exchange === tempContext.sellExCode && f_v_ObjXValSearchElementObjResultValueNumExMatchResultTargetInObjItemSystemLogicParamFormSysValReturnMathOutput.sell_exchange === tempContext.buyExCode)));
+        
+        if (!tgO) return;
+        
+        document.getElementById('stRatesL').innerText = (tgO.funding_rates[tempContext.buyExCode] || 0).toFixed(4) + '%';
+        document.getElementById('stRatesS').innerText = (tgO.funding_rates[tempContext.sellExCode] || 0).toFixed(4) + '%';
+        document.getElementById('stDevsL').innerText = (tgO.buy_deviation || 0).toFixed(2) + '%'; document.getElementById('stDevsS').innerText = (tgO.sell_deviation || 0).toFixed(2) + '%';
+        
+        let pLx_tT_OutValueAppFormulaObjectReturnToDisplayAsUsNumForFormatVisual = tgO.buy_exchange === tempContext.buyExCode ? tgO.buy_interval : tgO.sell_interval;
+        let pSx_tT_OutValueAppFormulaObjectReturnToDisplayAsUsNumForFormatVisualSysResFormPointFromEngineDataFlowInXValOutput = tgO.sell_exchange === tempContext.sellExCode ? tgO.sell_interval : tgO.buy_interval;
+
+        document.getElementById('stPeriodL').innerText = (pLx_tT_OutValueAppFormulaObjectReturnToDisplayAsUsNumForFormatVisual || 8) + 'ч';
+        document.getElementById('stPeriodS').innerText = (pSx_tT_OutValueAppFormulaObjectReturnToDisplayAsUsNumForFormatVisualSysResFormPointFromEngineDataFlowInXValOutput || 8) + 'ч';
+        globalCommConfigCalcValue = (tgO.buy_commission + tgO.sell_commission) * 2; document.getElementById('rCom').innerText = globalCommConfigCalcValue.toFixed(2) + '%';
+        if(lastWsPkgReceivedStorageItem) runRebuilderOfSpreadsMathCalculatorFlows(lastWsPkgReceivedStorageItem);
+    }
+
+    let nlWcSysClientSect = null;
+    function connectLive() {
+        nlWcSysClientSect = new WebSocket(`${CHARTER_WS}/api/live/depth${window.location.search}`);
+        nlWcSysClientSect.onmessage = pObjRsStrSystemAppNetworkValueEventForEngineResLogicTargetFlowOutputValFormatFunction => runRebuilderOfSpreadsMathCalculatorFlows(JSON.parse(pObjRsStrSystemAppNetworkValueEventForEngineResLogicTargetFlowOutputValFormatFunction.data)); 
+        nlWcSysClientSect.onclose = () => { setTimeout(connectLive, 3000); };
+    }
+</script>
+</body>
+</html>
