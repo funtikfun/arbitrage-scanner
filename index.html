@@ -91,7 +91,6 @@
         .ex-combo { display: flex; align-items: center; justify-content: center; gap: 4px; position:relative;}
         .ex-nums { display:flex; align-items: center; justify-content: center; gap: 12px; font-family: "Roboto Mono", monospace; font-size: 11.5px; color:#0f172a; font-weight: 500;}
         
-        /* Tooltip для шапки */
         .info-circle { width: 13px; height: 13px; border-radius: 50%; border: 1px solid #94a3b8; color: #94a3b8; display: inline-flex; justify-content: center; align-items: center; font-size: 9px; cursor: help; font-weight: bold; position: relative;}
         .header-tooltip-wrap { position: relative; cursor: help; }
         .header-tooltip-wrap .custom-tt {
@@ -129,7 +128,8 @@
                 <label class="checkbox-label"><input type="checkbox" class="cb-f" value="bitget" checked>Bitget</label>
                 <label class="checkbox-label"><input type="checkbox" class="cb-f" value="kucoin" checked>KuCoin</label>
                 <label class="checkbox-label"><input type="checkbox" class="cb-f" value="coinex" checked>CoinEx</label>
-                <label class="checkbox-label"><input type="checkbox" class="cb-f" value="bingx" checked>BingX</label> <!-- 🔴 -->
+                <label class="checkbox-label"><input type="checkbox" class="cb-f" value="bingx" checked>BingX</label>
+                <label class="checkbox-label"><input type="checkbox" class="cb-f" value="bitmart" checked>BitMart</label>
             </div>
         </div>
 
@@ -144,7 +144,8 @@
                 <label class="checkbox-label"><input type="checkbox" class="cb-s" value="bitget">Bitget</label>
                 <label class="checkbox-label"><input type="checkbox" class="cb-s" value="kucoin">KuCoin</label>
                 <label class="checkbox-label"><input type="checkbox" class="cb-s" value="coinex">CoinEx</label>
-                <label class="checkbox-label"><input type="checkbox" class="cb-s" value="bingx">BingX</label> <!-- 🔴 -->
+                <label class="checkbox-label"><input type="checkbox" class="cb-s" value="bingx">BingX</label>
+                <label class="checkbox-label"><input type="checkbox" class="cb-s" value="bitmart">BitMart</label>
             </div>
         </div>
         
@@ -158,7 +159,7 @@
                 <label class="checkbox-label"><input type="checkbox" class="cb-m" value="bitget">Bitget</label>
                 <label class="checkbox-label"><input type="checkbox" class="cb-m" value="kucoin">KuCoin</label>
                 <label class="checkbox-label"><input type="checkbox" class="cb-m" value="coinex">CoinEx</label>
-                <label class="checkbox-label"><input type="checkbox" class="cb-m" value="bingx">BingX</label> <!-- 🔴 -->
+                <label class="checkbox-label"><input type="checkbox" class="cb-m" value="bitmart">BitMart</label>
             </div>
         </div>
 
@@ -264,7 +265,7 @@
     let allAvailableCoins = [];
     
     let appliedFilters = {
-        exchangesF: ['binance_futures', 'bybit_futures', 'okx_futures', 'mexc_futures', 'bitget_futures', 'kucoin_futures', 'coinex_futures', 'bingx_futures'], // 🔴 По дефолту включен
+        exchangesF: ['binance_futures', 'bybit_futures', 'okx_futures', 'mexc_futures', 'bitget_futures', 'kucoin_futures', 'coinex_futures', 'bingx_futures', 'bitmart_futures'], 
         exchangesS: [], exchangesM: [], listType: 'ff', minKursSpread: null, minCurrentSpread: null, reqLimitUsd: 0, periodL: 0, periodS: 0, 
     };
 
@@ -333,7 +334,6 @@
     const whitelistEngine = attachMultiSelect('whitelistMenu', whitelistedSet);
     const blacklistEngine = attachMultiSelect('blacklistMenu', blacklistedSet);
 
-    // НОВЫЙ КОНСТРУКТОР ССЫЛОК СО СПЕЦИФИКОЙ 8 БИРЖ
     function buildExchangeUrl(exRaw, symbol) {
         if (!exRaw || !symbol) return '#';
         const parts = exRaw.split('_');
@@ -374,10 +374,15 @@
                 if (market === 'margin') return `https://www.coinex.com/ru/exchange/${baseLow}-usdt#margin`;
                 return `https://www.coinex.com/ru/exchange/${baseLow}-usdt`;
             }
-            case 'bingx': { // 🔴 ВНЕЛИ РОУТЫ БИНКСА В СКАНЕР
+            case 'bingx': { 
                 let baseUp = base.toUpperCase();
                 if (market === 'futures') return `https://bingx.com/ru/perpetual/${baseUp}-USDT`;
                 return `https://bingx.com/ru/spot/${baseUp}USDT`;
+            }
+            case 'bitmart': { 
+                let baseUp = base.toUpperCase();
+                if (market === 'futures') return `https://www.bitmart.com/trade/ru-RU?symbol=${baseUp}_USDT&layout=pro`;
+                return `https://www.bitmart.com/trade/ru-RU?symbol=${baseUp}_USDT&layout=basic`;
             }
             default: return '#';
         }
@@ -510,7 +515,7 @@
             if (appliedFilters.minCurrentSpread !== null && currentSpr < appliedFilters.minCurrentSpread) return false;
             
             let minVolSides = Math.min(opp.buy_cap || 0, opp.sell_cap || 0); 
-            if (appliedFilters.reqLimitUsd > 0 && minVolSides < appliedFilters.reqLimitUsd && minVolSides != 9999999) return false;
+            if (appliedFilters.reqLimitUsd > 0 && minVolSides < appliedFilters.reqLimitUsd && minVolSides != 999999) return false;
             
             return true;
         });
@@ -578,6 +583,7 @@
         }); netBus.onerror = () => document.getElementById('updateTime').innerText = "Reconnect.. Server Interrupted";
     }
 
+    // Запуск конвейера
     BootAndLinkNetwork();
 </script>
 </body>

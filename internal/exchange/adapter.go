@@ -6,6 +6,7 @@ import (
 	"github.com/testserver/arbitrage-scanner/binance"
 	"github.com/testserver/arbitrage-scanner/bingx"
 	"github.com/testserver/arbitrage-scanner/bitget"
+	"github.com/testserver/arbitrage-scanner/bitmart"
 	"github.com/testserver/arbitrage-scanner/bybit"
 	"github.com/testserver/arbitrage-scanner/coinex"
 	"github.com/testserver/arbitrage-scanner/kucoin"
@@ -69,4 +70,6 @@ func InitAppExchanges() {
 	Register(&wrapperStruct{"coinex", coinex.FetchFutures, coinex.FetchSpot, coinex.FetchMargin, coinex.FetchFundingHistory})
 	// BingX (наша доработанная)
 	Register(&wrapperStruct{"bingx", bingx.FetchFutures, bingx.FetchSpot, bingx.FetchMargin, bingx.FetchFundingHistory})
+	// BitMart
+	Register(&wrapperStruct{"bitmart", bitmart.FetchFutures, bitmart.FetchSpot, nullMargin, bitmart.FetchFundingHistory})
 }

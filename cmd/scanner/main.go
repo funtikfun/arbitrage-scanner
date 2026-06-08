@@ -23,11 +23,11 @@ var (
 	rdb *redis.Client
 	ctx = context.Background()
 
-	// Пулинг SSE клиентов
+	// Пулинг SSE клиентов (браузеров)
 	clients      = make(map[chan []byte]bool)
 	clientsMutex sync.RWMutex
 
-	// Кеширование результатов последнего Тика ОЗУ для GET-клиентов и API
+	// Кеширование результатов последнего Тика ОЗУ для GET-клиентов и новых заходов
 	lastPayload    []byte
 	lastPayloadMut sync.RWMutex
 )
@@ -35,64 +35,79 @@ var (
 func main() {
 	log.Println("🚀 СТАРТ ARBITRAGE SCANNER PRO (v2 Enterprise Engine)")
 
+	// 🌐 ВНЕДРЯЕМ АБСОЛЮТНЫЙ ЩИТ ПРОКСИ (Все вызовы HTTP теперь идут через балансировщик)
+	// Файл proxies.json должен лежать в internal/proxy/
 	smartRouter := proxy.InitSmartTransport("internal/proxy/proxies.json", 3)
 	http.DefaultTransport = smartRouter
 
+	// 1. Инициализируем Redis (нужен для совместимости с Charter)
 	rdb = redis.NewClient(&redis.Options{Addr: "localhost:6379"})
 	if err := rdb.Ping(ctx).Err(); err != nil {
 		log.Fatalf("❌ Ошибка Redis: %v", err)
 	}
 
+	// 2. Инициализируем Интерфейсы бирж
 	exchange.InitAppExchanges()
-	providers := exchange.GetProviders()
-	log.Printf("🔌 Подключены плагины %d бирж к сканеру.", len(providers))
+	loadedProviders := exchange.GetProviders()
+	log.Printf("🔌 Подключены плагины %d бирж к сканеру.", len(loadedProviders))
 
-	engine.DispatchAgents(providers)
+	// 3. Запускаем Диспетчера автономных потоков (Fast/Slow воркеры)
+	engine.DispatchAgents(loadedProviders)
 
-	broadcastCh := make(chan []byte, 10)
+	// 4. Поднимаем Событийный МАТЧЕР (В оперативке), который слушает шину данных
+	broadcastCh := make(chan []byte, 100)
 	go engine.RunInboundSuperMatcher(ctx, rdb, broadcastCh)
+
+	// Демон раздачи сообщений SSE-клиентам
 	go handleBroadcaster(broadcastCh)
 
+	// 5. Запускаем фоновых помощников (Конфиги и Словари)
 	go configWatcherDaemon()
 	go dictionaryDaemon()
 
-	// 💡 ИСЦЕЛЕННАЯ ССЫЛКА НА ДОМЕННУЮ КОРНЕВУЮ АДРЕСАЦИЮ:
+	// 6. Поднимаем Web-Server (Маршруты для UI и API)
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { http.ServeFile(w, r, "index.html") })
 	http.HandleFunc("/api/futures/list", handleApiList)
 	http.HandleFunc("/futures/stream", handleSSE)
 	http.HandleFunc("/chart", func(w http.ResponseWriter, r *http.Request) { http.ServeFile(w, r, "chart.html") })
 	http.HandleFunc("/debug", func(w http.ResponseWriter, r *http.Request) { http.ServeFile(w, r, "dev_tester.html") })
 
-	log.Println("✅ Архитектура Core v2 успешно развернута. Сервер прослушивает 0.0.0.0:8080...")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	log.Println("✅ Архитектура Core v2 успешно развернута. Порт :8080 прослушивается.")
+	if err := http.ListenAndServe(":8080", nil); err != nil {
+		log.Fatal(err)
+	}
 }
 
 // ==========================================
-// ВСПОМОГАТЕЛЬНЫЕ Web/Event ФУНКЦИИ ВЕТВЛЕНИЯ
+// ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 // ==========================================
 
-// Консьерж событий: Рассылает одну находку в Матчере на всех браузеров мира.
+// handleBroadcaster рассылает данные из Матчера всем активным браузерам
 func handleBroadcaster(broadcastCh <-chan []byte) {
 	for payload := range broadcastCh {
-		// Зафиксируем свежий слепок для новых подключающихся REST-клиентов:
+		// Сохраняем для новых подключений
 		lastPayloadMut.Lock()
 		lastPayload = payload
 		lastPayloadMut.Unlock()
 
+		// Рассылаем всем SSE клиентам
 		clientsMutex.RLock()
 		for ch := range clients {
 			select {
 			case ch <- payload:
 			default:
+				// Канал забит, пропускаем тик
 			}
 		}
 		clientsMutex.RUnlock()
 	}
 }
 
-// Выдача статической текущей таблицы RAM
+// handleApiList отдает текущий срез данных из памяти (для первичной загрузки страницы)
 func handleApiList(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
 	lastPayloadMut.RLock()
 	data := lastPayload
 	lastPayloadMut.RUnlock()
@@ -104,13 +119,14 @@ func handleApiList(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(`{"data": ` + string(data) + `}`))
 }
 
-// Труба бесконечной Event-stream подписки
+// handleSSE реализует потоковую передачу данных в браузер (Server-Sent Events)
 func handleSSE(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
 
-	ch := make(chan []byte, 1)
+	ch := make(chan []byte, 2)
 
 	clientsMutex.Lock()
 	clients[ch] = true
@@ -123,7 +139,7 @@ func handleSSE(w http.ResponseWriter, r *http.Request) {
 		clientsMutex.Unlock()
 	}()
 
-	// Моментально скармливаем крайний буфер Матчера
+	// Сразу отправляем текущее состояние
 	lastPayloadMut.RLock()
 	initSnap := lastPayload
 	lastPayloadMut.RUnlock()
@@ -147,10 +163,10 @@ func handleSSE(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// 🛡️ Safe-config Reader: атомарная и безблоковая замена ссылок конфигураций Ядра из JSON
+// configWatcherDaemon следит за файлами конфигурации без перезагрузки сервера
 func configWatcherDaemon() {
 	for {
-		// Никаких жестких линукс путей. Работаем чисто от корня сборки:
+		// Читаем коллизии
 		if colBytes, err := os.ReadFile("collisions.json"); err == nil && len(colBytes) > 0 {
 			var newCol map[string]string
 			if json.Unmarshal(colBytes, &newCol) == nil {
@@ -158,6 +174,7 @@ func configWatcherDaemon() {
 			}
 		}
 
+		// Читаем блэклист
 		if blBytes, err := os.ReadFile("blacklist.json"); err == nil && len(blBytes) > 0 {
 			var newBlArray []string
 			if json.Unmarshal(blBytes, &newBlArray) == nil {
@@ -168,26 +185,29 @@ func configWatcherDaemon() {
 				engine.GlobalBlacklist = fastMap
 			}
 		}
-		time.Sleep(15 * time.Second)
+		time.Sleep(20 * time.Second)
 	}
 }
 
-// Парсер-помощник Биржевых спецификаций лотов контрактов (CtVal, Multipliers, Size)
+// dictionaryDaemon подтягивает спецификации контрактов (мультипликаторы и базы)
 func dictionaryDaemon() {
 	client := &http.Client{Timeout: 15 * time.Second}
 	for {
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
-					log.Println("Dictionary Panicked and Recovered")
+					log.Println("📔 Dictionary Worker Recovered")
 				}
 			}()
+
+			// Обойма бирж для словаря (Включая BitMart)
+			exs := []string{"binance", "bybit", "okx", "bitget", "mexc", "kucoin", "coinex", "bingx", "bitmart"}
 
 			tempDict := make(map[string]map[string]struct {
 				BaseCoin   string
 				Multiplier float64
 			})
-			for _, e := range []string{"binance", "bybit", "okx", "bitget", "mexc", "kucoin", "coinex", "bingx"} {
+			for _, e := range exs {
 				tempDict[e] = make(map[string]struct {
 					BaseCoin   string
 					Multiplier float64
@@ -197,7 +217,7 @@ func dictionaryDaemon() {
 			var wg sync.WaitGroup
 			var dmu sync.Mutex
 
-			// --- ByBit (Size Base) ---
+			// --- 1. ByBit Loader ---
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
@@ -223,7 +243,7 @@ func dictionaryDaemon() {
 				}
 			}()
 
-			// --- OKX (Uly CtVal Base) ---
+			// --- 2. OKX Loader ---
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
@@ -248,10 +268,11 @@ func dictionaryDaemon() {
 				}
 			}()
 
-			// --- BingX ---
+			// --- 3. BingX & BitMart Shared Contracts Logic ---
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
+				// BingX
 				r, err := client.Get("https://open-api.bingx.com/openApi/swap/v2/quote/contracts")
 				if err == nil {
 					defer r.Body.Close()
@@ -271,13 +292,30 @@ func dictionaryDaemon() {
 						dmu.Unlock()
 					}
 				}
+				// BitMart
+				r2, err2 := client.Get("https://api-cloud-v2.bitmart.com/contract/public/details")
+				if err2 == nil {
+					defer r2.Body.Close()
+					var d2 struct {
+						Data struct{ Symbols []struct{ Symbol string } } `json:"data"`
+					}
+					if json.NewDecoder(r2.Body).Decode(&d2) == nil {
+						dmu.Lock()
+						for _, s := range d2.Data.Symbols {
+							base, mult := utils.ParseSymbolMeta(s.Symbol)
+							tempDict["bitmart"][s.Symbol] = struct {
+								BaseCoin   string
+								Multiplier float64
+							}{base, mult}
+						}
+						dmu.Unlock()
+					}
+				}
 			}()
-
-			// Остальные площадки без Size / Default-Lot под капотом парсятся базовой регуляркой из utils
 
 			wg.Wait()
 			engine.MasterDictionary = tempDict
-			log.Println("📔 Ядро успешно обновило Токены в памяти: Multiplier Data & Contracts Dictionaries")
+			log.Println("📔 Словари мультипликаторов и спецификации контрактов обновлены в ОЗУ.")
 		}()
 		time.Sleep(3 * time.Hour)
 	}

@@ -198,7 +198,7 @@ func handleChartSpread(w http.ResponseWriter, r *http.Request) {
 
 	now := time.Now().UTC()
 	endTime := now.UnixMilli()
-	startTime := now.Add(-10 * 24 * time.Hour).UnixMilli()
+	startTime := now.Add(-30 * 24 * time.Hour).UnixMilli()
 
 	cl := &http.Client{Timeout: 15 * time.Second}
 	var bLines, sLines []providers.BasicKline

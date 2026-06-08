@@ -32,6 +32,8 @@ func GetProvider(exName string) Fetcher {
 		return &CoinexFetcher{}
 	case "bingx":
 		return &BingxFetcher{} // 🔴 Добавьте вот эту строчку сюда!
+	case "bitmart":
+		return &BitmartFetcher{}
 	}
 	return nil
 }

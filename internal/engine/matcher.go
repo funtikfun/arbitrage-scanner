@@ -44,23 +44,20 @@ func resolveCollision(exchange, baseCoin string) string {
 func RunInboundSuperMatcher(ctx context.Context, rdb *redis.Client, broadcastCh chan<- []byte) {
 	log.Println("⚡ 3D Matcher запущен. Исключены конфликты и перемешивания направлений Спот/Маржа/Фьючи!")
 
-	// 1. АБСОЛЮТНАЯ ИЗОЛЯЦИЯ ПУЛОВ ЛИКВИДНОСТИ СТАРАЯ ПЛОСКАЯ КНИГА УНИЧТОЖЕНА!
-	bookFutures := make(map[string]map[string][]InternalAsset) // [Имя Биржи_futures] -> [Токен]
-	bookSpot := make(map[string]map[string][]InternalAsset)    // [Имя Биржи_spot]    -> [Токен]
-	bookMargin := make(map[string]map[string][]InternalAsset)  // [Имя Биржи_margin]  -> [Токен]
+	bookFutures := make(map[string]map[string][]InternalAsset)
+	bookSpot := make(map[string]map[string][]InternalAsset)
+	bookMargin := make(map[string]map[string][]InternalAsset)
 
 	slowFundingDB := make(map[string]map[string]models.FundingHistoryResult)
 
 	dirtyCoins := make(map[string]struct{})
 	finalOppBoard := make(map[string][]models.Opportunity)
 
-	// Быстрота пульса переоценки изменений на экраны:
 	computeTicker := time.NewTicker(350 * time.Millisecond)
 	defer computeTicker.Stop()
 
 	for {
 		select {
-		// Подтягиваем Месячную фандинг-накопленку в Кеш Ядра (из Воркеров-медведок)
 		case event := <-FundingUpdateBus:
 			exName := event.ExchangeName
 			if slowFundingDB[exName] == nil {
@@ -70,9 +67,13 @@ func RunInboundSuperMatcher(ctx context.Context, rdb *redis.Client, broadcastCh 
 				bBase := resolveCollision(exName, item.BaseCoin)
 				slowFundingDB[exName][bBase] = item
 				dirtyCoins[bBase] = struct{}{}
+
+				// 🟢 DEBUG №1: Проверяем, залетает ли живой фандинг по NEAR в память ОЗУ
+				if bBase == "NEAR" && exName == "bitmart" {
+					log.Printf("⚙️ [DEBUG 1] Сохранен фандинг BitMart по NEAR: 1d=%f, 3d=%f, 7d=%f", item.Funding1D, item.Funding3D, item.Funding7D)
+				}
 			}
 
-		// Распределяем Горячие Прайсы Ликвидности жестко по их Тип-Камерам ОЗУ:
 		case event := <-MarketUpdateBus:
 			poolKey := event.ExchangeName + "_" + event.MarketType
 
@@ -88,14 +89,16 @@ func RunInboundSuperMatcher(ctx context.Context, rdb *redis.Client, broadcastCh 
 				bookSpot[poolKey] = make(map[string][]InternalAsset)
 				for _, row := range event.SpotData {
 					base, mult := extractCoinMeta(event.ExchangeName, row.Symbol)
-					bookSpot[poolKey][base] = append(bookSpot[poolKey][base], InternalAsset{Raw: fabricateSpotPlaceholder(row), Base: base, Mult: mult})
+					frProxy := fabricateSpotPlaceholder(row)
+					bookSpot[poolKey][base] = append(bookSpot[poolKey][base], InternalAsset{Raw: frProxy, Base: base, Mult: mult})
 					dirtyCoins[base] = struct{}{}
 				}
 			case "margin":
 				bookMargin[poolKey] = make(map[string][]InternalAsset)
 				for _, row := range event.MarginData {
 					base, mult := extractCoinMeta(event.ExchangeName, row.Symbol)
-					bookMargin[poolKey][base] = append(bookMargin[poolKey][base], InternalAsset{Raw: fabricateMarginPlaceholder(row), Base: base, Mult: mult})
+					frProxy := fabricateMarginPlaceholder(row)
+					bookMargin[poolKey][base] = append(bookMargin[poolKey][base], InternalAsset{Raw: frProxy, Base: base, Mult: mult})
 					dirtyCoins[base] = struct{}{}
 				}
 			}
@@ -105,7 +108,6 @@ func RunInboundSuperMatcher(ctx context.Context, rdb *redis.Client, broadcastCh 
 				continue
 			}
 
-			// Регистры готовых доступных пулов (Удалена необходимость парсить их типы в цикле через String.Contains!)
 			var activeSpot, activeMargin, activeFutures []string
 			for k := range bookSpot {
 				activeSpot = append(activeSpot, k)
@@ -125,10 +127,8 @@ func RunInboundSuperMatcher(ctx context.Context, rdb *redis.Client, broadcastCh 
 				finalOppBoard[coin] = []models.Opportunity{}
 				var resultsForCoin []models.Opportunity
 
-				// 🔥 ЯДРО КРАЕУГОЛЬНОЙ АРХИТЕКТУРЫ РАСПРЕДЕЛЕНИЯ: ЕДИНЫЙ ХЕЛПЕР ОТРАБОТКИ СВЯЗКИ
 				runDirectionEval := func(exBKey, exSKey string, bAsk, bBid, bMult, sAsk, sBid, sMult, bSz, sSz, bTStmp, sTStmp float64,
 					bRaw, sRaw *models.FutureResult) {
-					// Стандарты Покупающей цены и Продажной. Проверка безопасности пустых "ног" ордеров:
 					if bAsk <= 0 {
 						bAsk = bBid
 					}
@@ -142,38 +142,35 @@ func RunInboundSuperMatcher(ctx context.Context, rdb *redis.Client, broadcastCh 
 							tD = -tD
 						}
 
-						// Время сделки до 15 сек разсинхрон - Безопасный Допуск Сделок на графики!
 						if tD <= 15000 || bTStmp == 0 || sTStmp == 0 {
 							spread := (((sBid / sMult) - (bAsk / bMult)) / (bAsk / bMult)) * 100.0
 
 							if spread >= -10.0 && spread <= 25.0 {
-								// Чистые Базы имен (например: binance, bybit)
 								cBaseB := exBKey[:len(exBKey)-len("_"+strings.Split(exBKey, "_")[1])]
 								cBaseS := exSKey[:len(exSKey)-len("_"+strings.Split(exSKey, "_")[1])]
 
 								hB := slowFundingDB[cBaseB][coin]
 								hS := slowFundingDB[cBaseS][coin]
 
-								opp := buildOppModel(coin, exBKey, exSKey, bRaw, sRaw, spread, hB, hS, safeVolLimit(bAsk, bSz), safeVolLimit(sBid, sSz))
+								// 🟢 DEBUG №2: Смотрим, с какими значениями фандинга собирается связка NEAR
+								if coin == "NEAR" && (cBaseB == "bitmart" || cBaseS == "bitmart") {
+									log.Printf("⚙️ [DEBUG 2] Сборка связки NEAR: %s (1d=%f) -> %s (1d=%f)", cBaseB, hB.Funding1D, cBaseS, hS.Funding1D)
+								}
 
-								// Внешняя подкраска Ликвидных Прайсов для Пользователя: Мы покажем Позицию Строго в рамках своей Полки
+								opp := buildOppModel(coin, exBKey, exSKey, bRaw, sRaw, spread, hB, hS, safeVolLimit(bAsk, bSz), safeVolLimit(sBid, sSz))
 								opp.AskPrice = bAsk
 								opp.BidPrice = sBid
-
 								resultsForCoin = append(resultsForCoin, opp)
 							}
 						}
 					}
 				}
 
-				// 🚀 ШАГ #1: ВЗНОС АРБИТРАЖА { СПОТ -> В -> ФЬЮЧЕРСЫ }
-				// Этап вырезающий корни 99% мусорного смешивания. Никто, кроме Левого-СПОТА сюда физически не вступает в бой за расчет!
+				// ШАГ #1: СПОТ -> ФЬЮЧЕРСЫ
 				for _, bExKey := range activeSpot {
 					for _, bToken := range bookSpot[bExKey][coin] {
-
 						for _, sExKey := range activeFutures {
 							for _, sToken := range bookFutures[sExKey][coin] {
-								// Все Споты уходят ТОЛЬКО ВЛЕВО В BUY(b)!  Фьючерс Строго получает Роль Right=S (SELL)! Передача в Калькулятор:
 								runDirectionEval(bExKey, sExKey,
 									bToken.Raw.Ask, bToken.Raw.Bid, bToken.Mult,
 									sToken.Raw.Ask, sToken.Raw.Bid, sToken.Mult,
@@ -184,7 +181,7 @@ func RunInboundSuperMatcher(ctx context.Context, rdb *redis.Client, broadcastCh 
 					}
 				}
 
-				// 🚀 ШАГ #2: ВЗНОС АРБИТРАЖА { ФЬЮЧЕРСЫ -> В -> ФЬЮЧЕРСЫ } (С обеих сторон кросс-линком i, j)
+				// ШАГ #2: ФЬЮЧЕРСЫ -> ФЬЮЧЕРСЫ
 				for i := 0; i < len(activeFutures); i++ {
 					kFutB := activeFutures[i]
 					for j := i + 1; j < len(activeFutures); j++ {
@@ -192,13 +189,11 @@ func RunInboundSuperMatcher(ctx context.Context, rdb *redis.Client, broadcastCh 
 
 						for _, fut1 := range bookFutures[kFutB][coin] {
 							for _, fut2 := range bookFutures[kFutS][coin] {
-								// Расчет как Фьючерс №1 на Фьючерс №2
 								runDirectionEval(kFutB, kFutS,
 									fut1.Raw.Ask, fut1.Raw.Bid, fut1.Mult,
 									fut2.Raw.Ask, fut2.Raw.Bid, fut2.Mult,
 									fut1.Raw.AskSize, fut2.Raw.BidSize, float64(fut1.Raw.Timestamp), float64(fut2.Raw.Timestamp), &fut1.Raw, &fut2.Raw)
 
-								// Зеркально Обратный Ход (А если Шортить Фьюч 1? Даём 2й запуск Хелпера Реверсивной Расстановки)
 								runDirectionEval(kFutS, kFutB,
 									fut2.Raw.Ask, fut2.Raw.Bid, fut2.Mult,
 									fut1.Raw.Ask, fut1.Raw.Bid, fut1.Mult,
@@ -208,14 +203,11 @@ func RunInboundSuperMatcher(ctx context.Context, rdb *redis.Client, broadcastCh 
 					}
 				}
 
-				// 🚀 ШАГ #3: ВЗНОС АРБИТРАЖА { ФЬЮЧЕРСЫ -> В -> МАРЖУ }
-				// Здесь наоборот. Только Фьючи Покупаются! Только Спот-МАРЖУ занимают (Спорт Вправо)!
+				// ШАГ #3: ФЬЮЧЕРСЫ -> МАРЖА
 				for _, bExKey := range activeFutures {
 					for _, bToken := range bookFutures[bExKey][coin] {
-
 						for _, sExKey := range activeMargin {
 							for _, sToken := range bookMargin[sExKey][coin] {
-								// Правые маржи вычитаются Строго: Лево(Покупки фьючей) Справа (Маржа)!
 								runDirectionEval(bExKey, sExKey,
 									bToken.Raw.Ask, bToken.Raw.Bid, bToken.Mult,
 									sToken.Raw.Ask, sToken.Raw.Bid, sToken.Mult,
@@ -229,10 +221,8 @@ func RunInboundSuperMatcher(ctx context.Context, rdb *redis.Client, broadcastCh 
 				finalOppBoard[coin] = resultsForCoin
 			}
 
-			// Отдаем Мусор из Токенов GarbageCollector-у
 			dirtyCoins = make(map[string]struct{})
 
-			// Сплавляем во Фронтенд-стример SSE Ядра
 			var outboundSlices []models.Opportunity
 			for _, oL := range finalOppBoard {
 				outboundSlices = append(outboundSlices, oL...)
